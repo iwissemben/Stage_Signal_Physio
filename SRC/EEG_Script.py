@@ -131,15 +131,15 @@ def filtfilt_cutoff_frequency_corrector(order, cutoff_freq, sampling_freq, pass_
 filename = "001_MolLud_20201112_1_c.xdf"
 # filename="020_DesMar_20211129_1_c.xdf"
 # path=os.path.normpath("../DAT/Input/001_MolLud_20201112_1_c.xdf")
-path = os.path.normpath("../DAT/Input/"+filename)
+path = os.path.normpath("./DAT/INPUT/"+filename)
 
 
 # Load only streams of interest (EEG signal and Mouse task Markers) from the xdf data file
-#data, header = pyxdf.load_xdf(path, select_streams=[{'type': 'EEG', 'name': 'LSLOutletStreamName-EEG'},{'type': 'Markers', 'name': 'MouseToNIC'}] )
+# data, header = pyxdf.load_xdf(path, select_streams=[{'type': 'EEG', 'name': 'LSLOutletStreamName-EEG'},{'type': 'Markers', 'name': 'MouseToNIC'}] )
 data, header = pyxdf.load_xdf(path, select_streams=[{'type': 'EEG'}, {
                               'type': 'Markers', 'name': 'MouseToNIC'}])
 
-#data, header = pyxdf.load_xdf(path)
+# data, header = pyxdf.load_xdf(path)
 
 # Selection of the streams of interest in the xdf file
 for i in range(len(data)):
