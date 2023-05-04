@@ -131,7 +131,7 @@ def filtfilt_cutoff_frequency_corrector(order, cutoff_freq, sampling_freq, pass_
 filename = "001_MolLud_20201112_1_c.xdf"
 # filename="020_DesMar_20211129_1_c.xdf"
 # path=os.path.normpath("../DAT/Input/001_MolLud_20201112_1_c.xdf")
-path = os.path.normpath("./DAT/INPUT/"+filename)
+path = os.path.normpath("../DAT/INPUT/"+filename)
 
 
 # Load only streams of interest (EEG signal and Mouse task Markers) from the xdf data file
