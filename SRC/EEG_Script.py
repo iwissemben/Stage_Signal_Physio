@@ -11,7 +11,8 @@ import pyxdf
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from scipy.signal import butter, filtfilt, welch  # library for creating filters
+# library for creating filters
+from scipy.signal import butter, iirnotch, filtfilt, welch
 from MyFunctions import *
 
 plt.close("all")  # close all figure windows
@@ -76,10 +77,16 @@ EEG_times = EEG_Stream["time_stamps"]-EEG_Stream["time_stamps"][0]
 EEG_raw_amplitudes = EEG_Stream["time_series"]
 
 # =============================================================================
+############ Centering - Substracting the average of each signal ##############
+# =============================================================================
+EEG_raw_amplitudes_means = np.mean(EEG_raw_amplitudes, axis=0)
+EEG_raw_amplitudes_centered = EEG_raw_amplitudes-EEG_raw_amplitudes_means
+
+# =============================================================================
 ################################## Re-referencement ###########################
 # =============================================================================
 # Re-referencing: Uniformly distributed electrodes
-EEG_raw_amp_mean = np.mean(EEG_raw_amplitudes)
+EEG_raw_amp_mean = np.mean(EEG_raw_amplitudes_centered)
 EEG_raw_rereferenced_amplitudes = EEG_raw_amplitudes - \
     EEG_raw_amp_mean  # rereferencing
 
@@ -132,6 +139,9 @@ LPf = filtfilt_cutoff_frequency_corrector(
 HPf = filtfilt_cutoff_frequency_corrector(
     filter_order, 1, Srate, pass_type="high_pass")
 
+# creation of a notch filter filtering the 50Hz
+# bn,an=iirnotch(w0=50,Q=,fs=Srate)
+
 
 # Creation of a 4th order butterworth band pass filter
 F_Nyquist = Srate/2
@@ -145,6 +155,7 @@ b, a = butter(filter_order, [HPf, LPf], btype='bandpass', fs=Srate)
 bl, al = butter(filter_order, LPf, btype='low', fs=Srate)
 # High-pass with rectified frequencies
 bh, ah = butter(filter_order, HPf, btype='High', fs=Srate)
+
 
 # Filtering of electrodes' signals
 
