@@ -13,7 +13,7 @@ import numpy as np
 import os
 # library for creating filters
 from scipy.signal import butter, iirnotch, filtfilt, welch
-from MyFunctions import *
+from my_functions import *
 
 plt.close("all")  # close all figure windows
 
