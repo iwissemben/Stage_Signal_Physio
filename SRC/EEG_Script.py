@@ -24,7 +24,7 @@ plt.close("all")  # close all figure windows
 filename = "001_MolLud_20201112_1_c.xdf"
 # filename="020_DesMar_20211129_1_c.xdf"
 # path=os.path.normpath("../DAT/Input/001_MolLud_20201112_1_c.xdf")
-path = os.path.normpath("../DAT/INPUT/"+filename)
+path = os.path.normpath("DAT/INPUT/"+filename)
 
 
 # Load only streams of interest (EEG signal and Mouse task Markers) from the xdf data file
@@ -100,7 +100,7 @@ i = 2  # electrode number
 electrodei = EEG_raw_rereferenced_amplitudes[:, i-1]
 
 # plotting electrode i-1's signal for verification
-Single_plot(filename, fig_number=1, x=EEG_times, y=electrodei,
+single_plot(filename, fig_number=1, x=EEG_times, y=electrodei,
             fig_title=" Raw EEG Signal Derivation " +
             str(i)+": "+channels_dic["Channel_"+str(i)],
             xlabel="Temps (s)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+")",
@@ -109,19 +109,20 @@ Single_plot(filename, fig_number=1, x=EEG_times, y=electrodei,
 # Plotting all of the electrodes' RAW signals in one figure with 4*2=8 graphs with the markers
 
 figure, axis = plt.subplots(2, 4)
-Mosaic_plot(filename, EEG_times, EEG_raw_rereferenced_amplitudes, Markers_times_labels,
-            figure, axis, fig_title="Raw EEG signals per electrodes", xlabel="Temps (s)",
-            ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][1]["unit"][0])+")", channels=channels_dic)
+mosaic_plot(figure, axis, filename, x=EEG_times, y=EEG_raw_rereferenced_amplitudes,
+            fig_title="Raw EEG signals per electrodes", xlabel="Temps (s)",
+            ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][1]["unit"][0])+")", channels=channels_dic,
+            markers_labels_times=Markers_times_labels)
 
 # =============================================================================
 ################################## FFT ########################################
 # =============================================================================
 
 # compute each channel's RAW FFT
-EEG_FFT = Compute_FFT_on_channels(EEG_raw_rereferenced_amplitudes, Srate)
+EEG_FFT = compute_fft_on_channels(EEG_raw_rereferenced_amplitudes, Srate)
 
 # plotting electrode i-1's raw signal FFT for verification
-Single_plot(filename, fig_number=3, x=EEG_FFT["fft_frequencies"], y=EEG_FFT["FFT_Results_EEG_channels"][:, i],
+single_plot(filename, fig_number=3, x=EEG_FFT["fft_frequencies"], y=EEG_FFT["FFT_Results_EEG_channels"][:, i],
             fig_title="FFT of raw Signal EEG Derivation " +
             str(i)+": "+channels_dic["Channel_"+str(i)],
             xlabel="Frequency(Hz)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][i]["unit"][0])+")",
@@ -175,7 +176,7 @@ EEG_Filtered_LFHF = filtfilt(
 EEG_Filtered_LFHF = filtfilt(bl, al, EEG_Filtered_LFHF, axis=0)
 
 # Plotting the filtered  electrode i-1's signal for verification
-Single_plot(filename, fig_number=4, x=EEG_times, y=filtered_signal_electrodei,
+single_plot(filename, fig_number=4, x=EEG_times, y=filtered_signal_electrodei,
             fig_title=" Filtered EEG Signal Derivation " +
             str(i)+": "+channels_dic["Channel_"+str(i)],
             xlabel="Temps (s)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+")",
@@ -183,11 +184,11 @@ Single_plot(filename, fig_number=4, x=EEG_times, y=filtered_signal_electrodei,
 
 
 # compute each channel's FILTERED signal's FFT
-EEG_Filtered_FFT = Compute_FFT_on_channels(EEG_Filtered, Srate)
-EEG_Filtered_LFHF_FFT = Compute_FFT_on_channels(EEG_Filtered_LFHF, Srate)
+EEG_Filtered_FFT = compute_fft_on_channels(EEG_Filtered, Srate)
+EEG_Filtered_LFHF_FFT = compute_fft_on_channels(EEG_Filtered_LFHF, Srate)
 
 # Plotting the filtered electrode i-1's FFT for verification
-Single_plot(filename, fig_number=5, x=EEG_Filtered_FFT["fft_frequencies"], y=EEG_Filtered_FFT["FFT_Results_EEG_channels"][:, i],
+single_plot(filename, fig_number=5, x=EEG_Filtered_FFT["fft_frequencies"], y=EEG_Filtered_FFT["FFT_Results_EEG_channels"][:, i],
             fig_title="FFT of filtered Signal EEG Derivation " +
             str(i)+": "+channels_dic["Channel_"+str(i)],
             xlabel="Frequency(Hz)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][i]["unit"][0])+")",
@@ -196,10 +197,9 @@ Single_plot(filename, fig_number=5, x=EEG_Filtered_FFT["fft_frequencies"], y=EEG
 # Plotting all of the electrodes' FILTERED signals in one figure with 4*2=8 graphs with the markers
 
 figure, axis = plt.subplots(2, 4)
-Mosaic_plot(filename, EEG_times, EEG_Filtered, Markers_times_labels, figure, axis,
-            fig_title="Filtered EEG signals per electrodes", xlabel="Temps(s)",
-            ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][1]["unit"][0])+")", channels=channels_dic)
-
+mosaic_plot(figure, axis, filename, x=EEG_times, y=EEG_Filtered, fig_title="Filtered EEG signals per electrodes", xlabel="Temps(s)",
+            ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][1]["unit"][0])+")", channels=channels_dic,
+            markers_labels_times=Markers_times_labels)
 
 # =============================================================================
 ############################# Periodogram #####################################
@@ -217,7 +217,7 @@ freqs, Pxx_densities = welch(EEG_Filtered, fs=Srate, window="hann",
 
 
 # Plotting electrodei's PSD
-Single_plot(filename, fig_number=7, x=freqs, y=Pxx_densities[:, i],
+single_plot(filename, fig_number=7, x=freqs, y=Pxx_densities[:, i],
             fig_title="PSD of filtered Signal EEG Derivation " +
             str(i)+": "+channels_dic["Channel_"+str(i)],
             xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+"²/Hz)",
@@ -227,15 +227,15 @@ Single_plot(filename, fig_number=7, x=freqs, y=Pxx_densities[:, i],
 # =============================================================================
 
 # function returns a 2d array of EEGtimes_indices associated with the nearest times to the markers timestamps
-nearest_marker_indices_timestamps = Nearest_timestamps_array_finder(
+nearest_marker_indices_timestamps = nearest_timestamps_array_finder(
     EEG_times, Markers_times_labels)
 # =============================================================================
 
 # PSD lag:1s before
-tridi_freqs_before, tridi_Pxx_densities_before = Compute_lagged_PSD(EEG_Filtered, Srate, nearest_marker_indices_timestamps,
+tridi_freqs_before, tridi_Pxx_densities_before = compute_lagged_psd(EEG_Filtered, Srate, nearest_marker_indices_timestamps,
                                                                     time_lag=1, direction="before")
 # PSD lag:1s after
-tridi_freqs_after, tridi_Pxx_densities_after = Compute_lagged_PSD(EEG_Filtered, Srate, nearest_marker_indices_timestamps,
+tridi_freqs_after, tridi_Pxx_densities_after = compute_lagged_psd(EEG_Filtered, Srate, nearest_marker_indices_timestamps,
                                                                   time_lag=1, direction="after")
 # testing
 # np.unique(tridi_freqs_after==tridi_freqs_before)
@@ -266,9 +266,9 @@ tridi_Pxx_densities_ratio_trial_task_markers = tridi_Pxx_densities_ratio[:, :, :
 tridi_Pxx_densities_ratio_trial_rest_markers = tridi_Pxx_densities_ratio[:, :, 1::2]
 
 # 2d arrays containing for each of the 8 electrodes the PXX average (rows) for the task computed on each block(3 trials)
-block1_task, block2_task = Compute_average_ratio_for_event_on_blocks_for_allelectrodes(
+block1_task, block2_task = compute_average_ratio_for_event_on_blocks_for_all_electrodes(
     tridi_Pxx_densities_ratio_trial_task_markers)
-block1_rest, block2_rest = Compute_average_ratio_for_event_on_blocks_for_allelectrodes(
+block1_rest, block2_rest = compute_average_ratio_for_event_on_blocks_for_all_electrodes(
     tridi_Pxx_densities_ratio_trial_rest_markers)
 
 # testing
@@ -278,11 +278,15 @@ block1_rest, block2_rest = Compute_average_ratio_for_event_on_blocks_for_allelec
 
 # Plotting electrodei's averaged PSD ratio (computed over the 1st block's task 3 trials) over frequencies
 
-Single_plot(filename, fig_number=8, x=tridi_freqs_ratio[1, :, 0], y=block1_task[:, i],
+single_plot(filename, fig_number=8, x=tridi_freqs_ratio[1, :, 0], y=block1_task[:, i],
             fig_title="Block 1 task trials' averaged PSD ratio \n Signal EEG Derivation " +
             str(i)+": "+channels_dic["Channel_"+str(i)]+" marker:"+str(i),
             xlabel="Frequencies(Hz)", ylabel="PSD ratio(after-Before/before) (%)")
 
 # =============================================================================
+# test stacking arrays
+testa1 = np.arange(1, 10)
+testa2 = np.arange(11, 20)
+testa3d = np.dstack((testa1, testa2))
 
 plt.show()

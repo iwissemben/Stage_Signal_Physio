@@ -10,7 +10,8 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "cwd": "${fileDirname}" //allows to specify a dynamic wd (where the python file is located)
         }
     ]
 }
