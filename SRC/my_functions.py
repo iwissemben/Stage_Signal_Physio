@@ -141,7 +141,63 @@ def mosaic_plot(figure, axis, filename: str, x: np.ndarray, y: np.ndarray, fig_t
 # =============================================================================
 
 
-def compute_fft_on_channels(EEG_channels_signal: np.ndarray, Sampling_rate: int | float):
+def fft_create_positive_frequency_vector(signal: np.ndarray, Sampling_rate: int | float):
+    """
+    produces a positive frequency vector for fft
+
+    inputs: numpy.ndarray(2D) and float as EEG_channels_signal and Sampling_rate
+    outputs: Dictionary [key1:array1,key2:array2] as [frequencies:values,amplitudes:values]
+    """
+    # Return the Discrete Fourier Transform sample positive frequencies.
+    fft_frequencies = np.fft.fftfreq(len(signal), d=1/Sampling_rate)
+    fft_frequencies = fft_frequencies[0:len(fft_frequencies)//2]
+    return fft_frequencies
+
+
+def fft_compute_on_single_channel(signal: np.ndarray):
+    """
+    Function that performs the fft of a single channel (column)
+
+    Only returns the returns the FFT result associated with positive frequencies.
+
+    inputs: numpy.ndarray(2D) as signal of an electrode
+    outputs: Dictionary [key1:array1,key2:array2] as [frequencies:values,amplitudes:values]
+    """
+    # Return the FFT signal of positive frequencies.
+    fft_signal = abs(np.fft.fft(signal))
+    fft_signal = fft_signal[0:len(fft_signal)//2]
+    return fft_signal
+
+
+def compute_fft_on_all_channels(EEG_channels_signal: np.ndarray, Sampling_rate: int | float):
+    """
+    Function that computes the FFT on each channel.
+
+    Each column of the 2d signal array is the signal of an electrode.
+    Iterates over each column to compute its FFT, on positive frequencies.
+    Returns a 2 key dictionary (frequencies,results eeg) associated with 2 arrays.
+
+    inputs: numpy.ndarray(2D) and float as EEG_channels_signal and Sampling_rate
+    outputs: Dictionary [key1:array1(1D),key2:array2(2D)] as [frequencies:values,amplitudes:values per electrodes]
+    """
+    # Create the vector of frequencies
+    frequencies = fft_create_positive_frequency_vector(
+        EEG_channels_signal, Sampling_rate)
+
+    # compute fft iteratively on each channel, store them in array, each column an electrode
+    FFT_Results_EEG_channels = []
+    for column in EEG_channels_signal.T:
+        fft_signal_electrodei = fft_compute_on_single_channel(column)
+        FFT_Results_EEG_channels.append(fft_signal_electrodei)
+
+    # Consistent shaping of data
+    FFT_Results_EEG_channels = np.array(FFT_Results_EEG_channels)
+    FFT_Results_EEG_channels = FFT_Results_EEG_channels.transpose()
+
+    return {"fft_frequencies": frequencies, "FFT_Results_EEG_channels": FFT_Results_EEG_channels}
+
+
+# def compute_fft_on_channels(EEG_channels_signal: np.ndarray, Sampling_rate: int | float):
     """
     Function that computes the FFT on each channel.
 
@@ -261,6 +317,10 @@ def compute_lagged_psd(EEG_data: np.ndarray, Srate: float | int, markers: np.nda
     inputs: numpy.ndarray(2D),float,numpy.ndarray(2D),float,str
     outputs: numpy.ndarray(3D),numpy.ndarray(3D) as tridi_frequencies, tridi_PSDs
     """
+    # 2 pb: dimensions de la matrice inchoerente, fonction trop complexe
+    # A faire:
+    #   -Simplifier la fonction,
+    #   -resoudre le probleme des dimensions
 
     # time expressed in number of points, Srate number of points per sec
     delta_index = int(Srate*time_lag)

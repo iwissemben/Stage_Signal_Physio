@@ -119,7 +119,7 @@ mosaic_plot(figure, axis, filename, x=EEG_times, y=EEG_raw_rereferenced_amplitud
 # =============================================================================
 
 # compute each channel's RAW FFT
-EEG_FFT = compute_fft_on_channels(EEG_raw_rereferenced_amplitudes, Srate)
+EEG_FFT = compute_fft_on_all_channels(EEG_raw_rereferenced_amplitudes, Srate)
 
 # plotting electrode i-1's raw signal FFT for verification
 single_plot(filename, fig_number=3, x=EEG_FFT["fft_frequencies"], y=EEG_FFT["FFT_Results_EEG_channels"][:, i],
@@ -184,8 +184,8 @@ single_plot(filename, fig_number=4, x=EEG_times, y=filtered_signal_electrodei,
 
 
 # compute each channel's FILTERED signal's FFT
-EEG_Filtered_FFT = compute_fft_on_channels(EEG_Filtered, Srate)
-EEG_Filtered_LFHF_FFT = compute_fft_on_channels(EEG_Filtered_LFHF, Srate)
+EEG_Filtered_FFT = compute_fft_on_all_channels(EEG_Filtered, Srate)
+EEG_Filtered_LFHF_FFT = compute_fft_on_all_channels(EEG_Filtered_LFHF, Srate)
 
 # Plotting the filtered electrode i-1's FFT for verification
 single_plot(filename, fig_number=5, x=EEG_Filtered_FFT["fft_frequencies"], y=EEG_Filtered_FFT["FFT_Results_EEG_channels"][:, i],
