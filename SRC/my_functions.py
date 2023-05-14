@@ -29,7 +29,6 @@ def stream_Finder_by_name(datalist, name):
 ############################# show_markers  #####################################
 # =============================================================================
 
-
 def show_markers(plot_type, markers_times_array: np.ndarray):
     """
     Custom function to display event markers as vertical lines on a graph (plt or axis). 
@@ -331,26 +330,25 @@ def compute_lagged_psd(EEG_data: np.ndarray, Srate: float | int, markers: np.nda
     for column in range(EEG_data.shape[1]):  # iterate on electrodes
         electrode_lagged_PSDS = []
         elecrode_frequencies = []
-        print("eeg filtered col:", column)
+        #print("eeg filtered col:", column)
         for timestamp_index in markers[:, 0]:  # iteration on markers
-            print("marker timestamp:", int(timestamp_index),
-                  "delta_index:", delta_index)
+            #print("marker timestamp:", int(timestamp_index),"delta_index:", delta_index)
 
             # Define the segment coordinates (start,end)
             # PSD on a range of time delta_time before the time stamp
             lower_end = int(timestamp_index)-delta_index
-            print("lower_end:", lower_end)
+            #print("lower_end:", lower_end)
 
             # PSD on a range of time delta_time after the time stamp
             higher_end = int(timestamp_index)+delta_index
-            print("Higher_end:", higher_end)
+            #print("Higher_end:", higher_end)
 
             # index_range=np.arange(lower_range,int(timestamp_index)+1)
             # +1 to inclue the value at the time stamp
             reference_end = int(timestamp_index)
 
-            print("index_range:", "(", lower_end, reference_end, ")")
-            print("delta_index:", delta_index)
+            #print("index_range:", "(", lower_end, reference_end, ")")
+            #print("delta_index:", delta_index)
 
             # Compute the welch method in accordance to the direction deisred
             if direction == "before":
@@ -377,6 +375,91 @@ def compute_lagged_psd(EEG_data: np.ndarray, Srate: float | int, markers: np.nda
 
     return tridi_frequencies, tridi_PSDs
 
+def get_segment_coordinates(reference_index:int,segment_length:int):
+    """
+    Computes the coordinates of a segment for psd calculation
+
+    inputs:int,int
+    outputs:int,int,int
+    """
+
+    # Define the segment coordinates (start,end)
+    # PSD on a range of time delta_time before the time stamp
+    lower_end = int(reference_index)-segment_length
+    print("lower_end:", lower_end)
+
+    # PSD on a range of time delta_time after the time stamp
+    higher_end = int(reference_index)+segment_length
+    print("Higher_end:", higher_end)
+
+    # index_range=np.arange(lower_range,int(timestamp_index)+1)
+    # +1 to inclue the value at the time stamp
+    reference_end = int(reference_index)
+
+    print("index_range:", "(", lower_end, reference_end, ")")
+    print("delta_index:", segment_length)
+    return lower_end,higher_end,reference_end
+
+
+def compute_lagged_psds_one_signal(signal:np.ndarray,Srate:float|int, markers:np.ndarray, time_lag: float | int = 1, direction: str = "before"):
+    """
+    Computes psd estimation (welch) on segments of a time signal around list of references
+    
+    inputs:numpy.ndarray(1D),float,numpy.ndarray(2D),float,str
+    outputs:numpy.ndarray(2D),numpy.ndarray(2D)
+    """
+    # time expressed in number of points, Srate number of points per sec
+    delta_index = int(Srate*time_lag)
+    electrode_lagged_PSDS = []
+    elecrode_frequencies = []
+
+    #iterate on the markers to compute on each the psd on a given direction
+    for timestamp_index in markers[:, 0]:
+        #get the coordinates of the segment on which the psd will be computed
+        lower_end,higher_end,reference_end=get_segment_coordinates(reference_index=timestamp_index,segment_length=delta_index)
+
+        # Compute the welch method on the segment in accordance with the direction deisred
+        if direction == "before":
+            freq, Pxx_density = welch(signal[lower_end:reference_end+1],
+                                        fs=Srate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
+        elif direction == "after":
+            freq, Pxx_density = welch(signal[reference_end:higher_end+1],
+                                        fs=Srate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
+        else:
+            print("Wrong direction provided, please specify either 'before' or 'after'")
+
+        # Store the result columns in lists (Nmarkers length)
+        electrode_lagged_PSDS.append(Pxx_density)
+        elecrode_frequencies.append(freq)
+
+        #Create layers: Stack elements of the lists (1D array) to create two 2D arrays (x=PSD,y=markeri) (x=freqs,y=markeri) 
+        electrode_stacked_markers = np.column_stack(electrode_lagged_PSDS)
+        electrode_stacked_frequencies = np.column_stack(elecrode_frequencies)
+    return electrode_stacked_frequencies,electrode_stacked_markers
+
+
+def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int, markers: np.ndarray, time_lag: float | int = 1, direction: str = "before"):
+    """
+    Computes psd estimation (welch) on segments of multiple time signals around list of references
+    
+    inputs:numpy.ndarray(2D),float,numpy.ndarray(2D),float,str
+    outputs:numpy.ndarray(3D),numpy.ndarray(3D)
+    """
+    layers_psds = []
+    layers_frequencies = []
+    for electrode in EEG_data.T:  # iterate on electrodes
+        #Produce a layer (2d array) of PSDs for an electrode
+        electrode_stacked_frequencies,electrode_stacked_markers=compute_lagged_psds_one_signal(electrode, Srate, markers,
+                                                                    time_lag=time_lag, direction=direction)
+        #store the layers in a list
+        layers_psds.append(electrode_stacked_markers)
+        layers_frequencies.append(electrode_stacked_frequencies)
+
+    #Stack each layer to get a 3d array (x=psdx or freqx ,y=markery,z=electrodez)
+    tridi_PSDs = np.stack(layers_psds,axis=2)
+    tridi_frequencies = np.stack(layers_frequencies,axis=2)
+
+    return tridi_frequencies, tridi_PSDs
 # =============================================================================
 ######################## Compute average ERSP on blocks  ######################
 # =============================================================================

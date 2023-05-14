@@ -237,6 +237,9 @@ tridi_freqs_before, tridi_Pxx_densities_before = compute_lagged_psd(EEG_Filtered
 # PSD lag:1s after
 tridi_freqs_after, tridi_Pxx_densities_after = compute_lagged_psd(EEG_Filtered, Srate, nearest_marker_indices_timestamps,
                                                                   time_lag=1, direction="after")
+
+tridi_freqs_before2, tridi_Pxx_densities_before2 = compute_lagged_psd2_all_electrodes(EEG_Filtered, Srate, nearest_marker_indices_timestamps,
+                                                                    time_lag=1, direction="before")
 # testing
 # np.unique(tridi_freqs_after==tridi_freqs_before)
 # np.unique(tridi_Pxx_densities_after==tridi_Pxx_densities_before)

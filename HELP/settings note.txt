@@ -1,0 +1,2 @@
+
+If we want to use filepaths relative to current workspace instead of the considered script to run on interactive mode correctly , On VS code go to settings, search "jupyter file root", and change the file root: ${fileDirname}" to "${workspaceRoot}"
