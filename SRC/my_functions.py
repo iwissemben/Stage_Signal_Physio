@@ -1,7 +1,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.signal import butter, filtfilt, welch  # library for creating filters
+from scipy.signal import welch  # library for creating filters
 
 
 # =============================================================================
@@ -21,7 +21,7 @@ def stream_Finder_by_name(datalist, name):
     streamindex = None
     for i in datalist:
         if any(str(name).upper() in string.upper() for string in i["info"]["name"]):
-            streamindex = data.index(i)
+            streamindex = datalist.index(i)
             print(streamindex)
             # print(i["info"]["type"])
             return streamindex
@@ -179,7 +179,7 @@ def compute_fft_on_all_channels(EEG_channels_signal: np.ndarray, Sampling_rate: 
     inputs: numpy.ndarray(2D) and float as EEG_channels_signal and Sampling_rate
     outputs: Dictionary [key1:array1(1D),key2:array2(2D)] as [frequencies:values,amplitudes:values per electrodes]
     """
-    # Create the vector of frequencies
+    # Create positive vector of frequencies
     frequencies = fft_create_positive_frequency_vector(
         EEG_channels_signal, Sampling_rate)
 
@@ -194,52 +194,19 @@ def compute_fft_on_all_channels(EEG_channels_signal: np.ndarray, Sampling_rate: 
     FFT_Results_EEG_channels = FFT_Results_EEG_channels.transpose()
 
     return {"fft_frequencies": frequencies, "FFT_Results_EEG_channels": FFT_Results_EEG_channels}
-
-
-# def compute_fft_on_channels(EEG_channels_signal: np.ndarray, Sampling_rate: int | float):
-    """
-    Function that computes the FFT on each channel.
-
-    Each column of the array is the signal of an electrode.
-
-    inputs: numpy.ndarray(2D) and float as EEG_channels_signal and Sampling_rate
-    outputs: Dictionary [key1:array1,key2:array2] as [frequencies:values,amplitudes:values]
-    """
-
-    # Computes the FFT returns one array of frequencies
-    fft_frequencies = np.fft.fftfreq(
-        len(EEG_channels_signal), d=1/Sampling_rate)
-
-    # only consider the positive frequencies
-    fft_frequencies = fft_frequencies[0:len(fft_frequencies)//2]
-
-    # compute fft iteratively on each channel, store them in array, each column an electrode
-    FFT_Results_EEG_channels = []
-    for column in range(EEG_channels_signal.shape[1]):
-        print(column)
-        fft_signal_electrodes = abs(np.fft.fft(EEG_channels_signal[:, column]))
-        fft_signal_electrodes = fft_signal_electrodes[0:len(
-            fft_signal_electrodes)//2]
-        FFT_Results_EEG_channels.append(fft_signal_electrodes)
-
-    # Consistent shaping of data
-    FFT_Results_EEG_channels = np.array(FFT_Results_EEG_channels)
-    FFT_Results_EEG_channels = FFT_Results_EEG_channels.transpose()
-
-    return {"fft_frequencies": fft_frequencies, "FFT_Results_EEG_channels": FFT_Results_EEG_channels}
-
 # =============================================================================
 ########################## Cutoff frequency corrector  ########################
 # =============================================================================
 
 
-def filtfilt_cutoff_frequency_corrector(order: int, cutoff_freq: float | int, sampling_freq: float | int, pass_type: str = ["low_pass", "high_pass"]):
+def filtfilt_cutoff_frequency_corrector(order: int, cutoff_freq: float | int, sampling_freq: float | int, pass_type: str = "low_pass"):
     """
     Function that corrects cutoff frequencies to use in combination with filt.filt()
 
     As a zero-phase filter (linear filter) is applied to a signal 
     the cutoff freq are diminished. The correction depends also on the order. 
     The adjustment is made on the angular cutoff frequency, which depends on the filter direction (LP,HP).
+    SPECIFY the type of the filter with either "low_pass" or "high_pass"
 
     inputs: numpy.ndarray(2D) and float as EEG_channels_signal and Sampling_rate
     outputs: Dictionary [key1:array1,key2:array2] as [frequencies:values,amplitudes:values]
@@ -300,81 +267,6 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
 ############################ Compute lagged PSD  ##############################
 # =============================================================================
 
-
-def compute_lagged_psd(EEG_data: np.ndarray, Srate: float | int, markers: np.ndarray, time_lag: float | int = 1, direction: str = "before"):
-    """
-    Computes the time lagged PSDs (ex 1 s before each marker)
-
-    Uses markers|EEG time stamps as reference to compute PSD around each.
-    Specify the direction and segment length relative to marker for calculation (1s default).
-    Iterate over each marker for each electrode
-    Stores the results as two arrays  
-
-    returns results as 2 3d arrays of frequencies and PSDs for each electrode.
-    Each layer of the returned 3d array being an electrode with for each a column per marker(rows,marker,electrode).
-
-    inputs: numpy.ndarray(2D),float,numpy.ndarray(2D),float,str
-    outputs: numpy.ndarray(3D),numpy.ndarray(3D) as tridi_frequencies, tridi_PSDs
-    """
-    # 2 pb: dimensions de la matrice inchoerente, fonction trop complexe
-    # A faire:
-    #   -Simplifier la fonction,
-    #   -resoudre le probleme des dimensions
-
-    # time expressed in number of points, Srate number of points per sec
-    delta_index = int(Srate*time_lag)
-
-    print("delta_index:", delta_index)
-    layersPSDs = []
-    layersFrequencies = []
-    for column in range(EEG_data.shape[1]):  # iterate on electrodes
-        electrode_lagged_PSDS = []
-        elecrode_frequencies = []
-        #print("eeg filtered col:", column)
-        for timestamp_index in markers[:, 0]:  # iteration on markers
-            #print("marker timestamp:", int(timestamp_index),"delta_index:", delta_index)
-
-            # Define the segment coordinates (start,end)
-            # PSD on a range of time delta_time before the time stamp
-            lower_end = int(timestamp_index)-delta_index
-            #print("lower_end:", lower_end)
-
-            # PSD on a range of time delta_time after the time stamp
-            higher_end = int(timestamp_index)+delta_index
-            #print("Higher_end:", higher_end)
-
-            # index_range=np.arange(lower_range,int(timestamp_index)+1)
-            # +1 to inclue the value at the time stamp
-            reference_end = int(timestamp_index)
-
-            #print("index_range:", "(", lower_end, reference_end, ")")
-            #print("delta_index:", delta_index)
-
-            # Compute the welch method in accordance to the direction deisred
-            if direction == "before":
-                freq, Pxx_density = welch(EEG_data[lower_end:reference_end+1, column],
-                                          fs=Srate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
-            elif direction == "after":
-                freq, Pxx_density = welch(EEG_data[reference_end:higher_end+1, column],
-                                          fs=Srate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
-
-            # liste d'array (chaque array est le PSD calculé pour chaque marqueur bas)
-            electrode_lagged_PSDS.append(Pxx_density)
-            elecrode_frequencies.append(freq)
-
-            # array 2d (x=PSD,y=quelmarqueur) une electrode
-            electrode_stacked_markers = np.column_stack(electrode_lagged_PSDS)
-            electrode_stacked_frequencies = np.column_stack(
-                elecrode_frequencies)
-
-        layersPSDs.append(electrode_stacked_markers)
-        layersFrequencies.append(electrode_stacked_frequencies)
-
-        tridi_PSDs = np.stack(layersPSDs)
-        tridi_frequencies = np.stack(layersFrequencies)
-
-    return tridi_frequencies, tridi_PSDs
-
 def get_segment_coordinates(reference_index:int,segment_length:int):
     """
     Computes the coordinates of a segment for psd calculation
@@ -400,10 +292,33 @@ def get_segment_coordinates(reference_index:int,segment_length:int):
     print("delta_index:", segment_length)
     return lower_end,higher_end,reference_end
 
-
-def compute_lagged_psds_one_signal(signal:np.ndarray,Srate:float|int, markers:np.ndarray, time_lag: float | int = 1, direction: str = "before"):
+def compute_welch_estimation_on_segment(signal:np.ndarray,direction:str,sample_rate:int,
+                                        reference_end:int,lower_end:int,higher_end:int,delta_index:int):
     """
-    Computes psd estimation (welch) on segments of a time signal around list of references
+    Computes the psd estimation(welch method) on a specific segment of a time signal.
+
+    inputs:numpy.ndarray(1D),str,numpy.ndarray(2D),float,str
+    outputs:numpy.ndarray(1D),numpy.ndarray(1D) as columns
+    """
+    if direction == "before":
+        freq, Pxx_density = welch(signal[lower_end:reference_end+1],
+                                    fs=sample_rate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
+    elif direction == "after":
+        freq, Pxx_density = welch(signal[reference_end:higher_end+1],
+                                    fs=sample_rate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
+    else:
+        print("Wrong direction provided, please specify either 'before' or 'after'")
+    return freq,Pxx_density
+
+
+def compute_lagged_psds_one_signal(signal:np.ndarray,Srate:float|int, markers:np.ndarray, 
+                                   time_lag: float | int = 1, direction: str = "before"):
+    """
+    Computes psd estimation (welch) on segments of a time signal around list of references.
+
+    For each index references (markers) the function delimits a segment of chosen time length and direction (before after ref).
+    Performs the welch method on the segment and returns two 1D arrays(column) on for frequencies other for psd resutls.
+    The resulting columns are stacked in two respective 2D arrays to make a layer representing the PSDs and Freqs of an electrode.
     
     inputs:numpy.ndarray(1D),float,numpy.ndarray(2D),float,str
     outputs:numpy.ndarray(2D),numpy.ndarray(2D)
@@ -418,16 +333,8 @@ def compute_lagged_psds_one_signal(signal:np.ndarray,Srate:float|int, markers:np
         #get the coordinates of the segment on which the psd will be computed
         lower_end,higher_end,reference_end=get_segment_coordinates(reference_index=timestamp_index,segment_length=delta_index)
 
-        # Compute the welch method on the segment in accordance with the direction deisred
-        if direction == "before":
-            freq, Pxx_density = welch(signal[lower_end:reference_end+1],
-                                        fs=Srate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
-        elif direction == "after":
-            freq, Pxx_density = welch(signal[reference_end:higher_end+1],
-                                        fs=Srate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
-        else:
-            print("Wrong direction provided, please specify either 'before' or 'after'")
-
+        # Compute the welch method on the segment in accordance with the deisred direction 
+        freq,Pxx_density=compute_welch_estimation_on_segment(signal,direction,Srate,reference_end,lower_end,higher_end,delta_index)
         # Store the result columns in lists (Nmarkers length)
         electrode_lagged_PSDS.append(Pxx_density)
         elecrode_frequencies.append(freq)
@@ -438,7 +345,8 @@ def compute_lagged_psds_one_signal(signal:np.ndarray,Srate:float|int, markers:np
     return electrode_stacked_frequencies,electrode_stacked_markers
 
 
-def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int, markers: np.ndarray, time_lag: float | int = 1, direction: str = "before"):
+def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int, markers: np.ndarray, 
+                                       time_lag: float | int = 1, direction: str = "before"):
     """
     Computes psd estimation (welch) on segments of multiple time signals around list of references
     
