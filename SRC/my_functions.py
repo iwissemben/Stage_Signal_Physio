@@ -46,12 +46,12 @@ def show_markers(plot_type, markers_times_array: np.ndarray):
 # iterate over an array of markers
     for i in markers_times_array:
         if i[1] == 111:
-            print(i)
+            #print(i)
             # plot a line x=time_stamp associated to the i marker of type 111 (begining of task)
-            print("plot_type is : ", type(plot_type), plot_type)
+            #print("plot_type is : ", type(plot_type), plot_type)
             marker111 = plot_type.axvline(x=i[0], color="b", label="111")
         else:
-            print(i)
+            #print(i)
             # plot a line x=time_stamp associated to the i marker of type 110 (begining of task)
             marker110 = plot_type.axvline(x=i[0], color="r", label="100")
     return marker111, marker110
