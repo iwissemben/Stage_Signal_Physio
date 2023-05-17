@@ -1,7 +1,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.signal import welch  # library for creating filters
+from scipy.signal import welch, periodogram  # library for creating filters
 
 
 # =============================================================================
@@ -29,6 +29,7 @@ def stream_Finder_by_name(datalist, name):
 ############################# show_markers  #####################################
 # =============================================================================
 
+
 def show_markers(plot_type, markers_times_array: np.ndarray):
     """
     Custom function to display event markers as vertical lines on a graph (plt or axis). 
@@ -46,12 +47,12 @@ def show_markers(plot_type, markers_times_array: np.ndarray):
 # iterate over an array of markers
     for i in markers_times_array:
         if i[1] == 111:
-            #print(i)
+            # print(i)
             # plot a line x=time_stamp associated to the i marker of type 111 (begining of task)
-            #print("plot_type is : ", type(plot_type), plot_type)
+            # print("plot_type is : ", type(plot_type), plot_type)
             marker111 = plot_type.axvline(x=i[0], color="b", label="111")
         else:
-            #print(i)
+            # print(i)
             # plot a line x=time_stamp associated to the i marker of type 110 (begining of task)
             marker110 = plot_type.axvline(x=i[0], color="r", label="100")
     return marker111, marker110
@@ -267,7 +268,8 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
 ############################ Compute lagged PSD  ##############################
 # =============================================================================
 
-def get_segment_coordinates(reference_index:int,segment_length:int):
+
+def get_segment_coordinates(reference_index: int, segment_length: int):
     """
     Computes the coordinates of a segment for psd calculation
 
@@ -290,10 +292,11 @@ def get_segment_coordinates(reference_index:int,segment_length:int):
 
     print("index_range:", "(", lower_end, reference_end, ")")
     print("delta_index:", segment_length)
-    return lower_end,higher_end,reference_end
+    return lower_end, higher_end, reference_end
 
-def compute_welch_estimation_on_segment(signal:np.ndarray,direction:str,sample_rate:int,
-                                        reference_end:int,lower_end:int,higher_end:int,delta_index:int):
+
+def compute_welch_estimation_on_segment(signal: np.ndarray, direction: str, sample_rate: int,
+                                        reference_end: int, lower_end: int, higher_end: int, delta_index: int):
     """
     Computes the psd estimation(welch method) on a specific segment of a time signal.
 
@@ -302,16 +305,16 @@ def compute_welch_estimation_on_segment(signal:np.ndarray,direction:str,sample_r
     """
     if direction == "before":
         freq, Pxx_density = welch(signal[lower_end:reference_end+1],
-                                    fs=sample_rate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
+                                  fs=sample_rate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
     elif direction == "after":
         freq, Pxx_density = welch(signal[reference_end:higher_end+1],
-                                    fs=sample_rate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
+                                  fs=sample_rate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
     else:
         print("Wrong direction provided, please specify either 'before' or 'after'")
-    return freq,Pxx_density
+    return freq, Pxx_density
 
 
-def compute_lagged_psds_one_signal(signal:np.ndarray,Srate:float|int, markers:np.ndarray, 
+def compute_lagged_psds_one_signal(signal: np.ndarray, Srate: float | int, markers: np.ndarray,
                                    time_lag: float | int = 1, direction: str = "before"):
     """
     Computes psd estimation (welch) on segments of a time signal around list of references.
@@ -319,7 +322,7 @@ def compute_lagged_psds_one_signal(signal:np.ndarray,Srate:float|int, markers:np
     For each index references (markers) the function delimits a segment of chosen time length and direction (before after ref).
     Performs the welch method on the segment and returns two 1D arrays(column) on for frequencies other for psd resutls.
     The resulting columns are stacked in two respective 2D arrays to make a layer representing the PSDs and Freqs of an electrode.
-    
+
     inputs:numpy.ndarray(1D),float,numpy.ndarray(2D),float,str
     outputs:numpy.ndarray(2D),numpy.ndarray(2D)
     """
@@ -328,46 +331,112 @@ def compute_lagged_psds_one_signal(signal:np.ndarray,Srate:float|int, markers:np
     electrode_lagged_PSDS = []
     elecrode_frequencies = []
 
-    #iterate on the markers to compute on each the psd on a given direction
+    # iterate on the markers to compute on each the psd on a given direction
     for timestamp_index in markers[:, 0]:
-        #get the coordinates of the segment on which the psd will be computed
-        lower_end,higher_end,reference_end=get_segment_coordinates(reference_index=timestamp_index,segment_length=delta_index)
+        # get the coordinates of the segment on which the psd will be computed
+        lower_end, higher_end, reference_end = get_segment_coordinates(
+            reference_index=timestamp_index, segment_length=delta_index)
 
-        # Compute the welch method on the segment in accordance with the deisred direction 
-        freq,Pxx_density=compute_welch_estimation_on_segment(signal,direction,Srate,reference_end,lower_end,higher_end,delta_index)
+        # Compute the welch method on the segment in accordance with the deisred direction
+        freq, Pxx_density = compute_welch_estimation_on_segment(
+            signal, direction, Srate, reference_end, lower_end, higher_end, delta_index)
         # Store the result columns in lists (Nmarkers length)
         electrode_lagged_PSDS.append(Pxx_density)
         elecrode_frequencies.append(freq)
 
-        #Create layers: Stack elements of the lists (1D array) to create two 2D arrays (x=PSD,y=markeri) (x=freqs,y=markeri) 
+        # Create layers: Stack elements of the lists (1D array) to create two 2D arrays (x=PSD,y=markeri) (x=freqs,y=markeri)
         electrode_stacked_markers = np.column_stack(electrode_lagged_PSDS)
         electrode_stacked_frequencies = np.column_stack(elecrode_frequencies)
-    return electrode_stacked_frequencies,electrode_stacked_markers
+    return electrode_stacked_frequencies, electrode_stacked_markers
 
 
-def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int, markers: np.ndarray, 
+def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int, markers: np.ndarray,
                                        time_lag: float | int = 1, direction: str = "before"):
     """
     Computes psd estimation (welch) on segments of multiple time signals around list of references
-    
+
     inputs:numpy.ndarray(2D),float,numpy.ndarray(2D),float,str
     outputs:numpy.ndarray(3D),numpy.ndarray(3D)
     """
     layers_psds = []
     layers_frequencies = []
     for electrode in EEG_data.T:  # iterate on electrodes
-        #Produce a layer (2d array) of PSDs for an electrode
-        electrode_stacked_frequencies,electrode_stacked_markers=compute_lagged_psds_one_signal(electrode, Srate, markers,
-                                                                    time_lag=time_lag, direction=direction)
-        #store the layers in a list
+        # Produce a layer (2d array) of PSDs for an electrode
+        electrode_stacked_frequencies, electrode_stacked_markers = compute_lagged_psds_one_signal(electrode, Srate, markers,
+                                                                                                  time_lag=time_lag, direction=direction)
+        # store the layers in a list
         layers_psds.append(electrode_stacked_markers)
         layers_frequencies.append(electrode_stacked_frequencies)
 
-    #Stack each layer to get a 3d array (x=psdx or freqx ,y=markery,z=electrodez)
-    tridi_PSDs = np.stack(layers_psds,axis=2)
-    tridi_frequencies = np.stack(layers_frequencies,axis=2)
+    # Stack each layer to get a 3d array (x=psdx or freqx ,y=markery,z=electrodez)
+    tridi_PSDs = np.stack(layers_psds, axis=2)
+    tridi_frequencies = np.stack(layers_frequencies, axis=2)
 
     return tridi_frequencies, tridi_PSDs
+
+# =============================================================================
+##################### Plot temporal signal and its DSPs  ######################
+# =============================================================================
+
+
+def plot_signal_time_dsps(signal: np.ndarray, sample_rate: int, signal_name: float):
+    N = len(signal)
+    print("N: ", N)
+    duration = N/sample_rate
+    print("duration: ", duration)
+    time_vector = np.arange(0, duration, 1/sample_rate)
+    print("time_vector shape: ", time_vector.shape)
+    N/sample_rate
+
+    # compute FFT of the signal
+    signal_fft = np.fft.fft(signal)
+    signal_frequency_vector = np.fft.fftfreq(len(signal), 1/sample_rate)
+
+    # compute PSD via FFT
+    psd_from_fft = (np.abs(signal_fft)**2)/(N*sample_rate)
+
+    # compute PSD via periodogram
+    freq1, Pxx_density1 = periodogram(signal, fs=sample_rate)
+    # print(type(psd_from_periodogram))
+    # computes DSP of the signal via scipy.signal.welch
+    freq2, Pxx_density2 = welch(signal, fs=sample_rate, window="hann",
+                                nperseg=1000, noverlap=1000//2, axis=0)
+    # , layout="constrained"
+    figure, axis = plt.subplots(4, layout="constrained")
+    figure.suptitle(signal_name + " :\n Time-signal and DSPs")
+
+    # plot time signal
+    axis[0].plot(time_vector, signal)
+    # axis[0].set_title('Time signal')
+    axis[0].set_ylabel("Amplitude(µV)")
+    axis[0].set_xlabel("time(s)")
+    axis[0].set_xlim(0)
+    axis[0].grid()
+
+    # plot signal's DSP via FFT
+    axis[1].plot(signal_frequency_vector, psd_from_fft)
+    # axis[1].set_title('PSD from FFT')
+    axis[1].set_xlim(0)
+    axis[1].set_ylabel("PSD from \n FFT (µV²/Hz)")
+    axis[1].set_xlabel("Frequency (Hz)")
+    axis[1].grid()
+
+    # plot signal's DSP via periodogramm
+    axis[2].plot(freq1, Pxx_density1)
+    # axis[2].set_title('PSD from periodogramm (µV²/Hz)')
+    axis[2].set_xlim(0)
+    axis[2].set_ylabel("PSD from \n periodogramm \n (µV²/Hz)")
+    axis[2].set_xlabel("Frequency (Hz)")
+    axis[2].grid()
+
+    # plot signal's DSP via scipy.signal.welch
+    axis[3].plot(freq2, Pxx_density2)
+    # axis[3].set_title('DSP')
+    axis[3].set_xlim(0)
+    axis[3].set_ylabel("PSD signal.welch \n (µV²/Hz)")
+    axis[3].set_xlabel("Frequency (Hz)")
+    axis[3].grid()
+
 # =============================================================================
 ######################## Compute average ERSP on blocks  ######################
 # =============================================================================

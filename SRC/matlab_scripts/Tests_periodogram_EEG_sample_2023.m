@@ -1,8 +1,12 @@
 clear
 close
 
-x = load('EEG_1channel_1000Hz.txt');%pour charger le signal expérimental
+x = load('../../DAT/INPUT/EEG_1channel_1000Hz.txt');%pour charger le signal expérimental
+y = load('../../DAT/INPUT/001_MolLud_20201112_1_c_499.txt');%pour charger le signal expérimental
+x1=y(:,1);
+
 Fs = 1000;%fréquence d'échantillonnage
+%Fs = 499;%fréquence d'échantillonnage
 Ps = 1/Fs;%période d'échantillonnage
 xc = x-mean(x);%pour centrer le signal
 N = length(xc);%pour avoir le nombre d'échantillons du signal
