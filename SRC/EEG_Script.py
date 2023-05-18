@@ -95,16 +95,17 @@ EEG_raw_rereferenced_amplitudes = EEG_raw_amplitudes - \
 # =============================================================================
 ############################## Event-Markers ##################################
 # =============================================================================
-# Selection of one electrode and plotting its signal with markers
+# Selection of one electrode
 
-i = 2  # electrode number
-electrodei = EEG_raw_rereferenced_amplitudes[:, i-1]
+ELECTRODE_NUMBER = 2  # [1,8]
+ELECTRODE_INDEX = ELECTRODE_NUMBER-1  # python indices start a 0
 
-# plotting electrode i-1's signal for verification
-single_plot(FILENAME, fig_number=1, x=EEG_times, y=electrodei,
+# plotting electrode i's signal for verification
+single_plot(FILENAME, fig_number=1, x=EEG_times, y=EEG_raw_rereferenced_amplitudes[:, ELECTRODE_INDEX],
             fig_title=" Raw EEG Signal Derivation " +
-            str(i)+": "+channels_dic["Channel_"+str(i)],
-            xlabel="Temps (s)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+")",
+            str(ELECTRODE_NUMBER)+": " +
+            channels_dic["Channel_"+str(ELECTRODE_NUMBER)],
+            xlabel="Temps (s)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][ELECTRODE_INDEX]["unit"][0])+")",
             markers_times_array=Markers_times_labels)
 
 # Plotting all of the electrodes' RAW signals in one figure with 4*2=8 graphs with the markers
@@ -122,11 +123,12 @@ mosaic_plot(figure, axis, FILENAME, x=EEG_times, y=EEG_raw_rereferenced_amplitud
 # compute each channel's RAW FFT
 EEG_FFT = compute_fft_on_all_channels(EEG_raw_rereferenced_amplitudes, Srate)
 
-# plotting electrode i-1's raw signal FFT for verification
-single_plot(FILENAME, fig_number=3, x=EEG_FFT["fft_frequencies"], y=EEG_FFT["FFT_Results_EEG_channels"][:, i],
+# plotting electrode i's raw signal FFT for verification
+single_plot(FILENAME, fig_number=3, x=EEG_FFT["fft_frequencies"], y=EEG_FFT["FFT_Results_EEG_channels"][:, ELECTRODE_INDEX],
             fig_title="FFT of raw Signal EEG Derivation " +
-            str(i)+": "+channels_dic["Channel_"+str(i)],
-            xlabel="Frequency(Hz)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][i]["unit"][0])+")",
+            str(ELECTRODE_NUMBER)+": " +
+            channels_dic["Channel_"+str(ELECTRODE_NUMBER)],
+            xlabel="Frequency(Hz)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][ELECTRODE_INDEX]["unit"][0])+")",
             point_style="-r", line_width=0.5)
 
 # =============================================================================
@@ -134,65 +136,84 @@ single_plot(FILENAME, fig_number=3, x=EEG_FFT["fft_frequencies"], y=EEG_FFT["FFT
 # =============================================================================
 
 FILTER_ORDER = 4
-# corrected cutoff frequency Low-pass butterworth filter
-LPf = filtfilt_cutoff_frequency_corrector(
-    FILTER_ORDER, 40, Srate, pass_type="low_pass")
-# corrected cutoff frequency High-pass butterworth filter
-HPf = filtfilt_cutoff_frequency_corrector(
-    FILTER_ORDER, 1, Srate, pass_type="high_pass")
+LOW_CUTOFF_FREQ_THEORETICAL = 1
+HIGH_CUTOFF_FREQ_THEORETICAL = 40
 
-# creation of a notch filter filtering the 50Hz
+
+# correct the frequencies
+LOW_CUTOFF_FREQ_CORRECTED = filtfilt_cutoff_frequency_corrector(
+    FILTER_ORDER, LOW_CUTOFF_FREQ_THEORETICAL, Srate, pass_type="high_pass")
+
+HIGH_CUTOFF_FREQ_CORRECTED = filtfilt_cutoff_frequency_corrector(
+    FILTER_ORDER, HIGH_CUTOFF_FREQ_THEORETICAL, Srate, pass_type="low_pass")
+
+print("LOW_CUTOFF_FREQ_THEORETICAL="+str(LOW_CUTOFF_FREQ_THEORETICAL))
+print("HIGH_CUTOFF_FREQ_THEORETICAL="+str(HIGH_CUTOFF_FREQ_THEORETICAL))
+print("LOW_CUTOFF_FREQ_CORRECTED="+str(LOW_CUTOFF_FREQ_CORRECTED))
+print("HIGH_CUTOFF_FREQ_CORRECTED="+str(HIGH_CUTOFF_FREQ_CORRECTED))
+
+# Filters creation
+
+# Notch-filter 50Hz
 # bn,an=iirnotch(w0=50,Q=,fs=Srate)
 
-
-# Creation of a 4th order butterworth band pass filter
+# butterworth filters 4th order (to compare BP vs LP+HP)
 F_Nyquist = Srate/2
 
 # creation of butterworth filters
 # b, a = butter(4,[(0.3)/F_Nyquist,50/F_Nyquist],btype='bandpass') #band-pass with direct frequencies
 # b, a = butter(4,[(0.3),50],btype='bandpass',fs=Srate)    #Band-pass with direct frequencies
+
 # Band-pass with rectified frequencies
-b, a = butter(FILTER_ORDER, [HPf, LPf], btype='bandpass', fs=Srate)
+bBP, aBP = butter(FILTER_ORDER, [
+                  LOW_CUTOFF_FREQ_CORRECTED, HIGH_CUTOFF_FREQ_CORRECTED], btype='bandpass', fs=Srate)
 # Low-pass  with rectified frequencies
-bl, al = butter(FILTER_ORDER, LPf, btype='low', fs=Srate)
+bLP, aLP = butter(FILTER_ORDER, HIGH_CUTOFF_FREQ_CORRECTED,
+                  btype='lowpass', fs=Srate)
 # High-pass with rectified frequencies
-bh, ah = butter(FILTER_ORDER, HPf, btype='High', fs=Srate)
+bHP, aHP = butter(FILTER_ORDER, LOW_CUTOFF_FREQ_CORRECTED,
+                  btype='highpass', fs=Srate)
 
+# Combine the low-pass and high-pass filters
+b_band = np.convolve(bLP, bHP)
+a_band = np.convolve(aLP, aHP)
 
-# Filtering of electrodes' signals
-
-# Filtering on one channel
-# filtered_signal_electrodei=filtfilt(b,a,electrodei) # Band-pass Filtering
-filtered_signal_electrodei = filtfilt(
-    bh, ah, electrodei)  # 1 High-pass Filtering
-filtered_signal_electrodei = filtfilt(
-    bl, al, filtered_signal_electrodei)  # 2 Then Low-pass Filtering
-
-# Filtering on all channels
-EEG_Filtered = filtfilt(b, a, EEG_raw_rereferenced_amplitudes,
-                        axis=0)          # Band-pass Filtering
+# Filtering on all channels (2 methods to compare)
+# on one hand Band-pass Filtering
+EEG_Filtered = filtfilt(bBP, aBP, EEG_raw_rereferenced_amplitudes, axis=0)
+# on the other High-Pass + Low-Pass
+# using the combined filter
 EEG_Filtered_LFHF = filtfilt(
-    bh, ah, EEG_raw_rereferenced_amplitudes, axis=0)  # 1 High-pass Filtering
-# 2 Then Low-pass Filtering
-EEG_Filtered_LFHF = filtfilt(bl, al, EEG_Filtered_LFHF, axis=0)
+    b_band, a_band, EEG_raw_rereferenced_amplitudes, axis=0)
 
-# Plotting the filtered  electrode i-1's signal for verification
-single_plot(FILENAME, fig_number=4, x=EEG_times, y=filtered_signal_electrodei,
+# test if BP filtering is same as LP+BP
+"""test1 = np.unique(EEG_Filtered == EEG_Filtered_LFHF)
+test2 = np.unique(np.rint(EEG_Filtered) == np.rint(EEG_Filtered_LFHF))
+EEG_Filtered_int = np.rint(EEG_Filtered)
+EEG_Filtered_LFHF_int = np.rint(EEG_Filtered_LFHF)
+
+print("Is BP exactly the same as LP+HP? : ", test1)
+print("Is BP approximately the same as LP+HP? : ", test2)"""
+
+# Plotting the filtered  electrode i's signal for verification
+single_plot(FILENAME, fig_number=4, x=EEG_times, y=EEG_Filtered[:, ELECTRODE_INDEX],
             fig_title=" Filtered EEG Signal Derivation " +
-            str(i)+": "+channels_dic["Channel_"+str(i)],
-            xlabel="Temps (s)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+")",
+            str(ELECTRODE_NUMBER)+": " +
+            channels_dic["Channel_"+str(ELECTRODE_NUMBER)],
+            xlabel="Temps (s)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][ELECTRODE_INDEX]["unit"][0])+")",
             markers_times_array=Markers_times_labels, point_style=".k")
 
 
-# compute each channel's FILTERED signal's FFT
+# compute each channel's FILTERED signal's FFT for each filtering method (to compare)
 EEG_Filtered_FFT = compute_fft_on_all_channels(EEG_Filtered, Srate)
 EEG_Filtered_LFHF_FFT = compute_fft_on_all_channels(EEG_Filtered_LFHF, Srate)
 
-# Plotting the filtered electrode i-1's FFT for verification
-single_plot(FILENAME, fig_number=5, x=EEG_Filtered_FFT["fft_frequencies"], y=EEG_Filtered_FFT["FFT_Results_EEG_channels"][:, i],
+# Plotting the filtered electrode i's FFT for verification
+single_plot(FILENAME, fig_number=5, x=EEG_Filtered_FFT["fft_frequencies"], y=EEG_Filtered_FFT["FFT_Results_EEG_channels"][:, ELECTRODE_INDEX],
             fig_title="FFT of filtered Signal EEG Derivation " +
-            str(i)+": "+channels_dic["Channel_"+str(i)],
-            xlabel="Frequency(Hz)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][i]["unit"][0])+")",
+            str(ELECTRODE_NUMBER)+": " +
+            channels_dic["Channel_"+str(ELECTRODE_NUMBER)],
+            xlabel="Frequency(Hz)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][ELECTRODE_INDEX]["unit"][0])+")",
             point_style=".r", line_width=0.5)
 
 # Plotting all of the electrodes' FILTERED signals in one figure with 4*2=8 graphs with the markers
@@ -218,11 +239,11 @@ freqs, Pxx_densities = welch(EEG_Filtered, fs=Srate, window="hann",
 
 
 # Plotting electrodei's PSD over entire signal
-single_plot(FILENAME, fig_number=7, x=freqs, y=Pxx_densities[:, i],
+single_plot(FILENAME, fig_number=7, x=freqs, y=Pxx_densities[:, ELECTRODE_INDEX],
             fig_title="PSD of filtered EEG signal derivation " +
-            str(i)+": "+channels_dic["Channel_" + str(i)] +
+            str(ELECTRODE_NUMBER)+": "+channels_dic["Channel_" + str(ELECTRODE_NUMBER)] +
             "\n (over whole signal)",
-            xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+"²/Hz)",
+            xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][ELECTRODE_INDEX]["unit"][0])+"²/Hz)",
             point_style=".g")
 
 
@@ -274,34 +295,34 @@ tridi_Pxx_densities_ratio_111_mean_block2 = np.mean(
     tridi_Pxx_densities_ratio_111[:, 3:6, :], axis=1)
 
 # Plotting electrodei's PSD before first marker 111
-single_plot(FILENAME, fig_number=8, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_111_before[:, 1, i],
+single_plot(FILENAME, fig_number=8, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_111_before[:, 1, ELECTRODE_INDEX],
             fig_title="PSD of filtered EEG signal derivation " +
-            str(i)+": "+channels_dic["Channel_" + str(i)] +
+            str(ELECTRODE_NUMBER)+": "+channels_dic["Channel_" + str(ELECTRODE_NUMBER)] +
             "\n before first marker 111 (over "+str(time_window)+"s)",
-            xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+"²/Hz)",
+            xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][ELECTRODE_INDEX]["unit"][0])+"²/Hz)",
             point_style=".g")
 
 
 # Plotting electrodei's PSD after first marker 111
-single_plot(FILENAME, fig_number=9, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_111_after[:, 1, i],
+single_plot(FILENAME, fig_number=9, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_111_after[:, 1, ELECTRODE_INDEX],
             fig_title="PSD of filtered EEG signal derivation " +
-            str(i)+": "+channels_dic["Channel_" + str(i)] +
+            str(ELECTRODE_NUMBER)+": "+channels_dic["Channel_" + str(ELECTRODE_NUMBER)] +
             "\n after first marker 111 (over "+str(time_window)+"s)",
-            xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+"²/Hz)", point_style=".g")
+            xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][ELECTRODE_INDEX]["unit"][0])+"²/Hz)", point_style=".g")
 
 
 # Plotting electrodei's PSD ratio for first marker 111
-single_plot(FILENAME, fig_number=10, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_ratio_111[:, 1, i],
+single_plot(FILENAME, fig_number=10, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_ratio_111[:, 1, ELECTRODE_INDEX],
 
             fig_title="PSD ratio of filtered EEG signal derivation " +
-            str(i)+": "+channels_dic["Channel_" + str(i)] +
+            str(ELECTRODE_NUMBER)+": "+channels_dic["Channel_" + str(ELECTRODE_NUMBER)] +
             "\n for first marker 111 ("+str(time_window)+"s)",
             xlabel="Frequencies(Hz)", ylabel="PSD ratio(after-Before/before) (%)")
 
 # Plotting electrodei's averaged PSD ratio (computed over 3 trials of the 1st block's task)
-single_plot(FILENAME, fig_number=11, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_ratio_111_mean_block1[:, i],
-            fig_title="PSD ratio of filtered EEG signal derivation " + str(i)+": "+channels_dic["Channel_" +
-                                                                                                str(i)] + "\n Averaged on first 3 markers 111 ("+str(time_window)+"s)",
+single_plot(FILENAME, fig_number=11, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_ratio_111_mean_block1[:, ELECTRODE_INDEX],
+            fig_title="PSD ratio of filtered EEG signal derivation " + str(ELECTRODE_NUMBER)+": "+channels_dic["Channel_" +
+                                                                                                               str(ELECTRODE_NUMBER)] + "\n Averaged on first 3 markers 111 ("+str(time_window)+"s)",
             xlabel="Frequencies(Hz)", ylabel="PSD ratio(after-Before/before) (%)")
 
 # =============================================================================

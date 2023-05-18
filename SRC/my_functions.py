@@ -127,7 +127,7 @@ def mosaic_plot(figure, axis, filename: str, x: np.ndarray, y: np.ndarray, fig_t
             if markers_labels_times is not None:
                 show_markers(axis[a, b], markers_labels_times)
 
-            axis[a, b].set_title("Electrode "+str(count) +
+            axis[a, b].set_title("Electrode "+str(count+1) +
                                  ":" + channels["Channel_"+str(count+1)])
             axis[a, b].set_xlabel(xlabel)
             axis[a, b].set_ylabel(ylabel)
