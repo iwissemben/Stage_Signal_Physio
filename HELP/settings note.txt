@@ -1,4 +1,12 @@
-Settings help for VS Code
--If we want to use filepaths relative to current workspace instead of the considered script to run on interactive mode correctly , On VS code go to settings, search "jupyter file root", and change the file root: ${fileDirname}" to "${workspaceRoot}"
+Settings help for VS Code:
+
+-Make sure to have the same working directory in terminal and vscode interractive mode. To use the root folder as reference:
+	-go to user settings, search for "python.terminal.executeInFileDir".
+	-Uncheck "exectue in file dir"
+
+-If we want to use filepaths relative to current workspace instead of the considered script to run on interactive mode correctly , 
+	-On VS code go to settings, 
+	-search "jupyter file root" 
+	-and change the file root: ${fileDirname}" to "${workspaceRoot}"
 -If plots rendered inside jupyter's cells aren't zoomable add '%matplotlib widget' line at the begining of the notebook. Eventually install the library 'ipympl' V.0.9.0.
  

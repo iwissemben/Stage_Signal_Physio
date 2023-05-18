@@ -22,14 +22,14 @@ plt.close("all")  # close all figure windows
 # =============================================================================
 # Define the xdf file path
 FILENAME = "001_MolLud_20201112_1_c.xdf"
-# FILENAME="020_DesMar_20211129_1_c.xdf"
+# FILENAME = "020_DesMar_20211129_1_c.xdf"
 # path=os.path.normpath("../DAT/Input/001_MolLud_20201112_1_c.xdf")
-path = os.path.normpath("DAT/INPUT/"+FILENAME)
+path = os.path.normpath("./DAT/INPUT/"+FILENAME)
 
 
 # Load only streams of interest (EEG signal and Mouse task Markers) from the xdf data file
 # data, header = pyxdf.load_xdf(path, select_streams=
-#[{'type': 'EEG', 'name': 'LSLOutletStreamName-EEG'},{'type': 'Markers', 'name': 'MouseToNIC'}] )
+# [{'type': 'EEG', 'name': 'LSLOutletStreamName-EEG'},{'type': 'Markers', 'name': 'MouseToNIC'}] )
 data, header = pyxdf.load_xdf(path, select_streams=[{'type': 'EEG'}, {
                               'type': 'Markers', 'name': 'MouseToNIC'}])
 
@@ -217,10 +217,11 @@ freqs, Pxx_densities = welch(EEG_Filtered, fs=Srate, window="hann",
                              nperseg=nbpoints_per_epoch, noverlap=nbpoints_per_epoch//2, axis=0)
 
 
-# Plotting electrodei's PSD
+# Plotting electrodei's PSD over entire signal
 single_plot(FILENAME, fig_number=7, x=freqs, y=Pxx_densities[:, i],
-            fig_title="PSD of filtered Signal EEG Derivation " +
-            str(i)+": "+channels_dic["Channel_"+str(i)],
+            fig_title="PSD of filtered EEG signal derivation " +
+            str(i)+": "+channels_dic["Channel_" + str(i)] +
+            "\n (over whole signal)",
             xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+"²/Hz)",
             point_style=".g")
 
@@ -232,31 +233,31 @@ nearest_marker_indices_timestamps = nearest_timestamps_array_finder(
     EEG_times, Markers_times_labels)
 # =============================================================================
 
+# time window over which the PSD is computed expressed in seconds
+time_window = 4
 # PSD lag:1s before
 tridi_freqs_before, tridi_Pxx_densities_before = compute_lagged_psd2_all_electrodes(EEG_Filtered, Srate, nearest_marker_indices_timestamps,
-                                                                    time_lag=1, direction="before")
+                                                                                    time_lag=time_window, direction="before")
 # PSD lag:1s after
 tridi_freqs_after, tridi_Pxx_densities_after = compute_lagged_psd2_all_electrodes(EEG_Filtered, Srate, nearest_marker_indices_timestamps,
-                                                                    time_lag=1, direction="after")
+                                                                                  time_lag=time_window, direction="after")
 
-#/!!!!\NECESSITé DE PARTAGER LES TRIDI SELON LES MARQUEURS AVANT DE CALCULER LES RATIOS CAR INVERSION DU CALCUL ENTRE LES DEUX MARKEURS
+# separation of the markers of each 3d array (before and after)
+tridi_Pxx_densities_111_before = tridi_Pxx_densities_before[:, ::2, :]
+tridi_Pxx_densities_111_after = tridi_Pxx_densities_after[:, ::2, :]
 
-#separation of the markers of each 3d array (before and after)
-tridi_Pxx_densities_111_before=tridi_Pxx_densities_before[:, ::2, :]
-tridi_Pxx_densities_111_after=tridi_Pxx_densities_after[:, ::2, :]
-
-tridi_Pxx_densities_100_before=tridi_Pxx_densities_before[:, 1::2, :]
-tridi_Pxx_densities_100_after=tridi_Pxx_densities_after[:, 1::2, :]
+tridi_Pxx_densities_100_before = tridi_Pxx_densities_before[:, 1::2, :]
+tridi_Pxx_densities_100_after = tridi_Pxx_densities_after[:, 1::2, :]
 
 # compute the ratio of the Pxx_densities of each side of each marker(12*2) of each of the 8 channel
 # need (PSDafter-PSDbefore/PSDbefore)*100
 tridi_Pxx_densities_ratio_111 = ((
-    tridi_Pxx_densities_111_after-tridi_Pxx_densities_111_before)/tridi_Pxx_densities_111_before)
+    tridi_Pxx_densities_111_after-tridi_Pxx_densities_111_before)/tridi_Pxx_densities_111_before)*100
 tridi_Pxx_densities_ratio_100 = ((
-    tridi_Pxx_densities_100_before-tridi_Pxx_densities_111_after)/tridi_Pxx_densities_111_after)
+    tridi_Pxx_densities_100_before-tridi_Pxx_densities_111_after)/tridi_Pxx_densities_111_after)*100
 
 # testing
-verite=np.unique(tridi_freqs_after==tridi_freqs_before)
+verite = np.unique(tridi_freqs_after == tridi_freqs_before)
 print(verite)
 
 # np.unique(tridi_Pxx_densities_after==tridi_Pxx_densities_before)
@@ -266,21 +267,42 @@ if verite == True:
 else:
     print("frequencies arrays are not matching")
 # 2 blocks of testing each for each arm (ie.Hemisphere)
-#compute the average of the ratios for each block (2*(3*111),2*(3*110))
-tridi_Pxx_densities_ratio_111_mean_block1=np.mean(tridi_Pxx_densities_ratio_111[:,0:3,:],axis=1)
-tridi_Pxx_densities_ratio_111_mean_block2=np.mean(tridi_Pxx_densities_ratio_111[:,3:6,:],axis=1)
+# compute the average of the ratios for each block (2*(3*111),2*(3*110))
+tridi_Pxx_densities_ratio_111_mean_block1 = np.mean(
+    tridi_Pxx_densities_ratio_111[:, 0:3, :], axis=1)
+tridi_Pxx_densities_ratio_111_mean_block2 = np.mean(
+    tridi_Pxx_densities_ratio_111[:, 3:6, :], axis=1)
+
+# Plotting electrodei's PSD before first marker 111
+single_plot(FILENAME, fig_number=8, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_111_before[:, 1, i],
+            fig_title="PSD of filtered EEG signal derivation " +
+            str(i)+": "+channels_dic["Channel_" + str(i)] +
+            "\n before first marker 111 (over "+str(time_window)+"s)",
+            xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+"²/Hz)",
+            point_style=".g")
 
 
-# Plotting electrodei's averaged PSD ratio (computed over the 1st block's task 3 trials) over frequencies
-single_plot(FILENAME, fig_number=8, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_ratio_111_mean_block1[:,i],
-            fig_title="V2 Block 1 task trials' averaged PSD ratio \n Signal EEG Derivation " +
-            str(i)+": "+channels_dic["Channel_"+str(i)]+" marker:"+str(i),
+# Plotting electrodei's PSD after first marker 111
+single_plot(FILENAME, fig_number=9, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_111_after[:, 1, i],
+            fig_title="PSD of filtered EEG signal derivation " +
+            str(i)+": "+channels_dic["Channel_" + str(i)] +
+            "\n after first marker 111 (over "+str(time_window)+"s)",
+            xlabel="frequency (Hz)", ylabel="PSD Amplitude ("+str(EEG_Stream["info"]["desc"][0]["channel"][i-1]["unit"][0])+"²/Hz)", point_style=".g")
+
+
+# Plotting electrodei's PSD ratio for first marker 111
+single_plot(FILENAME, fig_number=10, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_ratio_111[:, 1, i],
+
+            fig_title="PSD ratio of filtered EEG signal derivation " +
+            str(i)+": "+channels_dic["Channel_" + str(i)] +
+            "\n for first marker 111 ("+str(time_window)+"s)",
+            xlabel="Frequencies(Hz)", ylabel="PSD ratio(after-Before/before) (%)")
+
+# Plotting electrodei's averaged PSD ratio (computed over 3 trials of the 1st block's task)
+single_plot(FILENAME, fig_number=11, x=tridi_freqs_ratio[:, 0, 0], y=tridi_Pxx_densities_ratio_111_mean_block1[:, i],
+            fig_title="PSD ratio of filtered EEG signal derivation " + str(i)+": "+channels_dic["Channel_" +
+                                                                                                str(i)] + "\n Averaged on first 3 markers 111 ("+str(time_window)+"s)",
             xlabel="Frequencies(Hz)", ylabel="PSD ratio(after-Before/before) (%)")
 
 # =============================================================================
-# test stacking arrays
-testa1 = np.arange(1, 10)
-testa2 = np.arange(11, 20)
-testa3d = np.dstack((testa1, testa2))
-
 plt.show()
