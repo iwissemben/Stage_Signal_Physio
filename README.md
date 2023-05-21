@@ -1,10 +1,13 @@
-# Stage_Signal_Physio / Stage Signal Physiologique 
+
+# Stage Signal Physiologique 
 
 ## Description 
 
 This repository is dedicated to my end of master internship. The aim of the internship is to learn to collect and manipulate multimodal physiological signals and data obtained with various techniques such as EEG, fNIRS and motion-tracking. 
 
 For this project I joined the ReArm research team, and their work serve as a guide to my project.
+
+The first phase of the project is to analyze EEG signal. I hope to work on fNIRS and motion-tracking data too. 
 
 ## Table of contents
 * [Description](#Description)
