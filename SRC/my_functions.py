@@ -134,7 +134,6 @@ def mosaic_plot(figure, axis, filename: str, x: np.ndarray, y: np.ndarray, fig_t
             count = count+1
     plt.suptitle(fig_title+"\n"+filename)
     plt.legend()
-    figure.show()
 
 # =============================================================================
 ############################# Compute_FFT_on_channels  ########################
@@ -380,6 +379,9 @@ def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int,
 
 
 def plot_signal_time_dsps(signal: np.ndarray, sample_rate: int, signal_name: float):
+    """
+    Soon
+    """
     N = len(signal)
     print("N: ", N)
     duration = N/sample_rate
@@ -402,7 +404,7 @@ def plot_signal_time_dsps(signal: np.ndarray, sample_rate: int, signal_name: flo
     freq2, Pxx_density2 = welch(signal, fs=sample_rate, window="hann",
                                 nperseg=1000, noverlap=1000//2, axis=0)
     # , layout="constrained"
-    figure, axis = plt.subplots(4, layout="constrained")
+    figure, axis = plt.subplots(4, figsize=(7, 5), layout="constrained")
     figure.suptitle(signal_name + " :\n Time-signal and DSPs")
 
     # plot time signal
