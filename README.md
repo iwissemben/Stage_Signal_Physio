@@ -68,6 +68,7 @@ The project Stage_Signal_Physio is organized as a directory with the following s
 This folder contains the scripts to run. Each is dedicated to study a subject. The main script is 'EEG_script.py". 
 
 - 'EEG_script.py' it reads the raw data (.xdf file in DAT/INPUT), and processes the EEG signal to obtain the ERSP and represents each electrode's signal in a time frequency plot (cf. [Kosei Nakayashiki publication](https://pubmed.ncbi.nlm.nih.gov/24886610/)).
+- 'my_functions.py' and 'my_filters.py' are scripts that contain custom functions. These are like tailor-made toolboxes that are called in other scripts such as 'EEG_script.py'.
 
 ## FAQ
 ### What is the aim of the EEG part of the internship?
