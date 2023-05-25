@@ -2,11 +2,7 @@ clear
 close
 
 x = load('../../DAT/INPUT/EEG_1channel_1000Hz.txt');%pour charger le signal expérimental
-y = load('../../DAT/INPUT/001_MolLud_20201112_1_c_499.txt');%pour charger le signal expérimental
-x1=y(:,1);
-
 Fs = 1000;%fréquence d'échantillonnage
-%Fs = 499;%fréquence d'échantillonnage
 Ps = 1/Fs;%période d'échantillonnage
 xc = x-mean(x);%pour centrer le signal
 N = length(xc);%pour avoir le nombre d'échantillons du signal
@@ -27,6 +23,14 @@ PSD = (abs(Xfft).^2)/(N*Fs);%calcul du périodogramme à partir du module au car
 %Calcul du périodogramme de Welch avec un fenêtrage de Hamming, des tailles
 %de fenêtres de 1000 points (1 seconde) et un overlap de 500 points
 [PSDw,fw] = pwelch(xc,hamming(1000),500,N,Fs);
+
+%Exportation des resultats de PSD
+matricePSDpw_titres=["f_fft","PSDfft","fm","PSDm","fw","PSDw"]
+matricePSDfftpw=horzcat(f',PSD(1:length(f)),fm',PSDm',fw,PSDw)
+
+table_complete= array2table(matricePSDfftpw,'VariableNames',matricePSDpw_titres)
+
+writetable(table_complete,'../../DAT/OUTPUT/MATLAB_EEG_PSDs_data_1000Hz.csv',Delimiter=";",WriteMode="overwrite")
 
 figure
 subplot(4,1,1)

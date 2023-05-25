@@ -149,7 +149,8 @@ def fft_create_positive_frequency_vector(signal: np.ndarray, Sampling_rate: int 
     """
     # Return the Discrete Fourier Transform sample positive frequencies.
     fft_frequencies = np.fft.fftfreq(len(signal), d=1/Sampling_rate)
-    fft_frequencies = fft_frequencies[0:len(fft_frequencies)//2]
+    # last coordinate not comprised
+    fft_frequencies = fft_frequencies[0:(len(fft_frequencies)//2)+1]
     return fft_frequencies
 
 
@@ -164,7 +165,7 @@ def fft_compute_on_single_channel(signal: np.ndarray):
     """
     # Return the FFT signal of positive frequencies.
     fft_signal = abs(np.fft.fft(signal))
-    fft_signal = fft_signal[0:len(fft_signal)//2]
+    fft_signal = fft_signal[0:(len(fft_signal)//2)+1]
     return fft_signal
 
 
@@ -289,8 +290,11 @@ def get_segment_coordinates(reference_index: int, segment_length: int):
     # +1 to inclue the value at the time stamp
     reference_end = int(reference_index)
 
-    print("index_range:", "(", lower_end, reference_end, ")")
-    print("delta_index:", segment_length)
+    print("segment coordinates before marker:", "(", lower_end, ";",
+          reference_end, "), delta_index:", segment_length)
+
+    print("segment coordinates after marker:", "(", reference_end, ";",
+          higher_end, "), delta_index:", segment_length)
     return lower_end, higher_end, reference_end
 
 
@@ -378,9 +382,11 @@ def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int,
 # =============================================================================
 
 
-def plot_signal_time_dsps(signal: np.ndarray, sample_rate: int, signal_name: float):
+def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int, signal_name: str):
     """
-    Soon
+    Computes the PSD of the signal with 3 methods (via FFT,and via periodogram and welch scipy functions) 
+    and plots the time signal alongside its PSDs. 
+    The function also returns the results as 3 2D np.arrays for each method as a couple of columns (frequencies,PSD).
     """
     N = len(signal)
     print("N: ", N)
@@ -394,6 +400,11 @@ def plot_signal_time_dsps(signal: np.ndarray, sample_rate: int, signal_name: flo
     signal_fft = np.fft.fft(signal)
     signal_frequency_vector = np.fft.fftfreq(len(signal), 1/sample_rate)
 
+    # Only keep the positive frequencies and associated amplitudes
+    signal_frequency_vector = signal_frequency_vector[0:((len(
+        signal_frequency_vector)//2)+1)]  # +1 due to python intervals
+    signal_fft = signal_fft[0:((len(signal_fft)//2)+1)]
+
     # compute PSD via FFT
     psd_from_fft = (np.abs(signal_fft)**2)/(N*sample_rate)
 
@@ -402,9 +413,15 @@ def plot_signal_time_dsps(signal: np.ndarray, sample_rate: int, signal_name: flo
     # print(type(psd_from_periodogram))
     # computes DSP of the signal via scipy.signal.welch
     freq2, Pxx_density2 = welch(signal, fs=sample_rate, window="hann",
-                                nperseg=1000, noverlap=1000//2, axis=0)
-    # , layout="constrained"
-    figure, axis = plt.subplots(4, figsize=(7, 5), layout="constrained")
+                                nperseg=1000, noverlap=1000//2, nfft=len(signal), axis=0)
+
+    # column stack frequency with psd results for each method
+    PSD_fft = np.column_stack((signal_frequency_vector, psd_from_fft))
+    PSD_p = np.column_stack((freq1, Pxx_density1))
+    PSD_w = np.column_stack((freq2, Pxx_density2))
+
+    figure, axis = plt.subplots(4, figsize=(
+        7, 5), layout="constrained", num=fig_number)
     figure.suptitle(signal_name + " :\n Time-signal and DSPs")
 
     # plot time signal
@@ -438,7 +455,26 @@ def plot_signal_time_dsps(signal: np.ndarray, sample_rate: int, signal_name: flo
     axis[3].set_ylabel("PSD signal.welch \n (µV²/Hz)")
     axis[3].set_xlabel("Frequency (Hz)")
     axis[3].grid()
+    return PSD_fft, PSD_p, PSD_w
 
+# =============================================================================
+############################ Generate test signal  ############################
+# =============================================================================
+
+
+def generate_sine_wave(amplitude, frequency, duration, change_time, new_amplitude, sample_rate):
+    t = np.linspace(0, duration, num=int(duration*sample_rate))
+    signal = amplitude * np.sin(2 * np.pi * frequency * t)
+    signal2 = new_amplitude * np.sin(2 * np.pi * frequency * t)
+
+    # Change amplitude after a certain time
+    change_index = int(change_time * sample_rate)
+    signal[change_index:] = signal2[change_index:]
+
+    """signal[change_index:] = new_amplitude * \
+        np.sin(2 * np.pi * frequency * t[change_index:])"""
+
+    return t, signal
 # =============================================================================
 ######################## Compute average ERSP on blocks  ######################
 # =============================================================================

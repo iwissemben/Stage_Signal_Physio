@@ -81,7 +81,7 @@ EEG_raw_amplitudes = EEG_Stream["time_series"]
 # =============================================================================
 ############################ Electrode selection ##############################
 # =============================================================================
-ELECTRODE_NUMBER = 2  # [1,8]
+ELECTRODE_NUMBER = 1  # [1,8]
 ELECTRODE_INDEX = ELECTRODE_NUMBER-1  # python indices start a 0
 
 # plotting electrode i's raw time signal for verification
@@ -296,10 +296,16 @@ tridi_Pxx_densities_100_after = tridi_Pxx_densities_after[:, 1::2, :]
 
 # compute the ratio of the Pxx_densities of each side of each marker(12*2) of each of the 8 channel
 # need (PSDafter-PSDbefore/PSDbefore)*100
-tridi_Pxx_densities_ratio_111 = ((
+tridi_Pxx_densities_ratio_111 = (
+    tridi_Pxx_densities_111_after-tridi_Pxx_densities_111_before)*100
+tridi_Pxx_densities_ratio_100 = (
+    tridi_Pxx_densities_100_before-tridi_Pxx_densities_111_after)*100
+
+"""tridi_Pxx_densities_ratio_111 = ((
     tridi_Pxx_densities_111_after-tridi_Pxx_densities_111_before)/tridi_Pxx_densities_111_before)*100
 tridi_Pxx_densities_ratio_100 = ((
-    tridi_Pxx_densities_100_before-tridi_Pxx_densities_111_after)/tridi_Pxx_densities_111_after)*100
+    tridi_Pxx_densities_100_before-tridi_Pxx_densities_111_after)/tridi_Pxx_densities_111_after)*100"""
+
 
 # testing
 verite = np.unique(tridi_freqs_after == tridi_freqs_before)
