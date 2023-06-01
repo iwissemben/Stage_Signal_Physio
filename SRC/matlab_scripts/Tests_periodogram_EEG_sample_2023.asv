@@ -31,7 +31,8 @@ matricePSDfftpw=horzcat(f',PSD(1:length(f)),fm',PSDm',fw,PSDw)
 table_complete= array2table(matricePSDfftpw,'VariableNames',matricePSDpw_titres)
 
 writetable(table_complete,'../../DAT/OUTPUT/MATLAB_EEG_PSDs_data_1000Hz.csv',Delimiter=";",WriteMode="overwrite")
-%dlmwrite('../../DAT/OUTPUT/MATLAB_EEG_PSDs_data_1000Hz.csv', matricePSDfftpw, 'delimiter', ';', 'precision', 100);
+
+writematrix(matricePSDfftpw,'M.xls')
 
 figure
 subplot(4,1,1)

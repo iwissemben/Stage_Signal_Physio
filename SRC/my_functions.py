@@ -1,7 +1,8 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.signal import welch, periodogram  # library for creating filters
+# library for creating filters
+from scipy.signal import welch, periodogram, get_window, hamming, boxcar
 
 
 # =============================================================================
@@ -149,8 +150,14 @@ def fft_create_positive_frequency_vector(signal: np.ndarray, Sampling_rate: int 
     """
     # Return the Discrete Fourier Transform sample positive frequencies.
     fft_frequencies = np.fft.fftfreq(len(signal), d=1/Sampling_rate)
+    print("fft_frequencies last value", fft_frequencies[-1])
+    print("fft_frequencies len ", len(fft_frequencies))
+
     # last coordinate not comprised
-    fft_frequencies = fft_frequencies[0:(len(fft_frequencies)//2)+1]
+    print("coordin: ", (len(fft_frequencies)//2))
+    fft_frequencies = fft_frequencies[0:(len(fft_frequencies)//2)]
+    print("fft_frequencies half last value: ",  fft_frequencies[-1])
+    print("fft_frequencies half len ", len(fft_frequencies))
     return fft_frequencies
 
 
@@ -165,7 +172,11 @@ def fft_compute_on_single_channel(signal: np.ndarray):
     """
     # Return the FFT signal of positive frequencies.
     fft_signal = abs(np.fft.fft(signal))
-    fft_signal = fft_signal[0:(len(fft_signal)//2)+1]
+    print("fft_signal length: ", len(fft_signal))
+    fft_signal = fft_signal[0:(len(fft_signal)//2)]
+    # fft_signal = fft_signal[0:(len(fft_signal)//2)]
+    # print("fft_signal half length: ", len(fft_signal))
+
     return fft_signal
 
 
@@ -308,10 +319,12 @@ def compute_welch_estimation_on_segment(signal: np.ndarray, direction: str, samp
     """
     if direction == "before":
         freq, Pxx_density = welch(signal[lower_end:reference_end+1],
-                                  fs=sample_rate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
+                                  fs=sample_rate, window="hann",
+                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)
     elif direction == "after":
         freq, Pxx_density = welch(signal[reference_end:higher_end+1],
-                                  fs=sample_rate, window="hann", nperseg=delta_index, noverlap=delta_index//2, axis=0)
+                                  fs=sample_rate, window="hann",
+                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)
     else:
         print("Wrong direction provided, please specify either 'before' or 'after'")
     return freq, Pxx_density
@@ -394,26 +407,29 @@ def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int,
     print("duration: ", duration)
     time_vector = np.arange(0, duration, 1/sample_rate)
     print("time_vector shape: ", time_vector.shape)
-    N/sample_rate
 
     # compute FFT of the signal
     signal_fft = np.fft.fft(signal)
     signal_frequency_vector = np.fft.fftfreq(len(signal), 1/sample_rate)
 
     # Only keep the positive frequencies and associated amplitudes
-    signal_frequency_vector = signal_frequency_vector[0:((len(
-        signal_frequency_vector)//2)+1)]  # +1 due to python intervals
+
+    signal_frequency_vector = signal_frequency_vector[0:(
+        (len(signal_frequency_vector)//2)+1)]  # +1 due to python intervals
+
     signal_fft = signal_fft[0:((len(signal_fft)//2)+1)]
 
     # compute PSD via FFT
     psd_from_fft = (np.abs(signal_fft)**2)/(N*sample_rate)
 
     # compute PSD via periodogram
-    freq1, Pxx_density1 = periodogram(signal, fs=sample_rate)
+    freq1, Pxx_density1 = periodogram(
+        signal,  fs=sample_rate, window=boxcar(N), detrend=False)
     # print(type(psd_from_periodogram))
     # computes DSP of the signal via scipy.signal.welch
-    freq2, Pxx_density2 = welch(signal, fs=sample_rate, window="hann",
-                                nperseg=1000, noverlap=1000//2, nfft=len(signal), axis=0)
+    freq2, Pxx_density2 = welch(signal, fs=sample_rate, window=hamming(1000),
+                                nperseg=1000, noverlap=500, nfft=N, detrend=False,
+                                axis=0)
 
     # column stack frequency with psd results for each method
     PSD_fft = np.column_stack((signal_frequency_vector, psd_from_fft))
@@ -464,7 +480,7 @@ def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int,
 
 def generate_sine_wave(amplitude, frequency, duration, change_time, new_amplitude, sample_rate):
     t = np.linspace(0, duration, num=int(duration*sample_rate))
-    signal = amplitude * np.sin(2 * np.pi * frequency * t)
+    signal = amplitude * np.cos(2 * np.pi * frequency * t)
     signal2 = new_amplitude * np.sin(2 * np.pi * frequency * t)
 
     # Change amplitude after a certain time
