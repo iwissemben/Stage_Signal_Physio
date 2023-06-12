@@ -92,10 +92,11 @@ single_plot(FILENAME, fig_number=1, x=EEG_times, y=EEG_raw_amplitudes[:, ELECTRO
             xlabel="Temps (s)", ylabel="Amplitude("+str(EEG_Stream["info"]["desc"][0]["channel"][ELECTRODE_INDEX]["unit"][0])+")",
             markers_times_array=Markers_times_labels)
 
-EEG_raw_FFT = compute_fft_on_all_channels(EEG_raw_amplitudes, Srate)
+EEG_raw_FFT = compute_fft_on_all_channels2(
+    channels_signals=EEG_raw_amplitudes, Fs=Srate)
 
 # plotting electrode i's raw signal FFT for verification
-single_plot(FILENAME, fig_number=2, x=EEG_raw_FFT["fft_frequencies"], y=EEG_raw_FFT["FFT_Results_EEG_channels"][:, ELECTRODE_INDEX],
+single_plot(FILENAME, fig_number=2, x=EEG_raw_FFT["FFT_frequencies"], y=EEG_raw_FFT["FFT_magnitudes"][:, ELECTRODE_INDEX],
             fig_title="FFT of raw signal EEG Derivation " +
             str(ELECTRODE_NUMBER)+": " +
             channels_dic["Channel_"+str(ELECTRODE_NUMBER)],
@@ -136,10 +137,11 @@ single_plot(FILENAME, fig_number=4, x=EEG_times, y=EEG_raw_rereferenced_amplitud
             markers_times_array=Markers_times_labels)
 
 # compute each channel's centered, rereferenced FFT
-EEG_FFT = compute_fft_on_all_channels(EEG_raw_rereferenced_amplitudes, Srate)
+EEG_FFT = compute_fft_on_all_channels2(
+    channels_signals=EEG_raw_rereferenced_amplitudes, Fs=Srate)
 
 # plotting electrode i's  signal centered, rereferenced FFT for verification
-single_plot(FILENAME, fig_number=5, x=EEG_FFT["fft_frequencies"], y=EEG_FFT["FFT_Results_EEG_channels"][:, ELECTRODE_INDEX],
+single_plot(FILENAME, fig_number=5, x=EEG_FFT["FFT_frequencies"], y=EEG_FFT["FFT_magnitudes"][:, ELECTRODE_INDEX],
             fig_title="FFT of Centered rereferenced signal EEG Derivation " +
             str(ELECTRODE_NUMBER)+": " +
             channels_dic["Channel_"+str(ELECTRODE_NUMBER)],
@@ -228,12 +230,13 @@ single_plot(FILENAME, fig_number=7, x=EEG_times, y=EEG_Filtered_NOTCH_BP[:, ELEC
             markers_times_array=Markers_times_labels)
 
 # compute each channel's filtered signal's FFT
-EEG_Filtered_FFT_NOTCH = compute_fft_on_all_channels(EEG_Filtered_NOTCH, Srate)
-EEG_Filtered_FFT_NOTCH_BP = compute_fft_on_all_channels(
-    EEG_Filtered_NOTCH_BP, Srate)
+EEG_Filtered_FFT_NOTCH = compute_fft_on_all_channels2(
+    channels_signals=EEG_Filtered_NOTCH, Fs=Srate)
+EEG_Filtered_FFT_NOTCH_BP = compute_fft_on_all_channels2(
+    channels_signals=EEG_Filtered_NOTCH_BP, Fs=Srate)
 
 # plotting electrode i's  signal centered, rereferenced FFT for verification
-single_plot(FILENAME, fig_number=8, x=EEG_Filtered_FFT_NOTCH_BP["fft_frequencies"], y=EEG_Filtered_FFT_NOTCH_BP["FFT_Results_EEG_channels"][:, ELECTRODE_INDEX],
+single_plot(FILENAME, fig_number=8, x=EEG_Filtered_FFT_NOTCH_BP["FFT_frequencies"], y=EEG_Filtered_FFT_NOTCH_BP["FFT_magnitudes"][:, ELECTRODE_INDEX],
             fig_title="FFT of Filtered (Notch + BP) EEG Signal Derivation " +
             str(ELECTRODE_NUMBER)+": " +
             channels_dic["Channel_"+str(ELECTRODE_NUMBER)],
