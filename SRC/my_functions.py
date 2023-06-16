@@ -3,11 +3,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 # library for creating filters
 from scipy.signal import welch, periodogram, get_window, hamming, boxcar
-
+from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset, inset_axes
 
 # =============================================================================
 ############################# Stream_Finder_by_name  ##########################
 # =============================================================================
+
+
 def stream_Finder_by_name(datalist, name):
     """
     This function browse the dictionary  
@@ -395,11 +397,19 @@ def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int,
 # =============================================================================
 
 
-def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int, signal_name: str):
+def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
     """
-    Computes the PSD of the signal with 3 methods (via FFT,and via periodogram and welch scipy functions) 
-    and plots the time signal alongside its PSDs. 
-    The function also returns the results as 3 2D np.arrays for each method as a couple of columns (frequencies,PSD).
+    Computes the PSD of a signal using 3 different methods (via FFT, via Scipy's periodogram and welch functions).
+
+    Parameters:
+        signal (np.ndarray): 1D array of amplitudes
+        sample_rate (int): sampling rate of the signal
+
+    Return:
+        time_signal (dict): Dictionary containing signal's timepoints and amplitudes as ndarray under key1 "time_vector" and key2 "amplitudes".
+        PSD_fft (dict) : Dictionary containing signal's DSP results computed via FFT: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
+        PSD_p (dict) : Dictionary containing signal's DSP results computed via periodogram: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
+        PSD_w (dict) : Dictionary containing signal's DSP results computed via welch: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
     """
     N = len(signal)
     print("N: ", N)
@@ -413,7 +423,6 @@ def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int,
     signal_frequency_vector = np.fft.fftfreq(len(signal), 1/sample_rate)
 
     # Only keep the positive frequencies and associated amplitudes
-
     signal_frequency_vector = signal_frequency_vector[0:(
         (len(signal_frequency_vector)//2)+1)]  # +1 due to python intervals
 
@@ -426,22 +435,49 @@ def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int,
     freq1, Pxx_density1 = periodogram(
         signal,  fs=sample_rate, window=boxcar(N), detrend=False)
     # print(type(psd_from_periodogram))
-    # computes DSP of the signal via scipy.signal.welch
     freq2, Pxx_density2 = welch(signal, fs=sample_rate, window=hamming(1000),
                                 nperseg=1000, noverlap=500, nfft=N, detrend=False,
                                 axis=0)
 
-    # column stack frequency with psd results for each method
-    PSD_fft = np.column_stack((signal_frequency_vector, psd_from_fft))
-    PSD_p = np.column_stack((freq1, Pxx_density1))
-    PSD_w = np.column_stack((freq2, Pxx_density2))
+    # create dictionaries of frequencies with psd results for each method to return
+    time_signal = {"time_vector": time_vector, "amplitudes": signal}
+    PSD_fft = {"frequencies": signal_frequency_vector, "psds": psd_from_fft}
+    PSD_p = {"frequencies": freq1, "psds": Pxx_density1}
+    PSD_w = {"frequencies": freq2, "psds": Pxx_density2}
+    return time_signal, PSD_fft, PSD_p, PSD_w
 
+
+def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int, signal_name: str, external_results: np.array = None):
+    """
+    Plots the time signal alongside its 3 PSDs.
+
+    Calls compute_signal_time_dsps() and plots the results as figure of 4 subplots (lines).
+    If external_results provided the function will superimpose the external results to each corresponding PSD subplot and add an inset zoom to check differences.
+
+    Parameters:
+        fig_number (int): Number of the figure.
+        signal (np.ndarray): 1D array of amplitudes.
+        sample_rate (int): sampling rate (in Hz).
+        signal_name (str): Name of the signal for figure title.
+        external_results (ndarray): array of PSD results. Each results is formed by 2 columns (frequencies, respective psd result). Must be 3*2 columns (3 PSD methods)
+    External results must be an array array of 6 columns arranged by two as 3*(frequenceies,psds) for each PSD calculation method.
+
+    Return:
+        PSD_fft (dict) : Dictionary containing signal's DSP results computed via FFT: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
+        PSD_p (dict) : Dictionary containing signal's DSP results computed via periodogram: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
+        PSD_w (dict) : Dictionary containing signal's DSP results computed via welch: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
+    """
+    # compute the PSDs of a signal using 3 different methods
+    time_signal, PSD_fft, PSD_p, PSD_w = compute_signal_time_dsps(
+        signal=signal, sample_rate=sample_rate)
+
+    # Show the time signal and the 3 different results of the PSD
     figure, axis = plt.subplots(4, figsize=(
-        7, 5), layout="constrained", num=fig_number)
+        10, 7), layout="constrained", num=fig_number)
     figure.suptitle(signal_name + " :\n Time-signal and DSPs")
 
     # plot time signal
-    axis[0].plot(time_vector, signal)
+    axis[0].plot(time_signal["time_vector"], time_signal["amplitudes"], "-k")
     # axis[0].set_title('Time signal')
     axis[0].set_ylabel("Amplitude(µV)")
     axis[0].set_xlabel("time(s)")
@@ -449,7 +485,7 @@ def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int,
     axis[0].grid()
 
     # plot signal's DSP via FFT
-    axis[1].plot(signal_frequency_vector, psd_from_fft)
+    axis[1].plot(PSD_fft["frequencies"], PSD_fft["psds"], label="Python")
     # axis[1].set_title('PSD from FFT')
     axis[1].set_xlim(0)
     axis[1].set_ylabel("PSD from \n FFT (µV²/Hz)")
@@ -457,7 +493,7 @@ def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int,
     axis[1].grid()
 
     # plot signal's DSP via periodogramm
-    axis[2].plot(freq1, Pxx_density1)
+    axis[2].plot(PSD_p["frequencies"], PSD_p["psds"], label="_Python")
     # axis[2].set_title('PSD from periodogramm (µV²/Hz)')
     axis[2].set_xlim(0)
     axis[2].set_ylabel("PSD from \n periodogramm \n (µV²/Hz)")
@@ -465,13 +501,84 @@ def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int,
     axis[2].grid()
 
     # plot signal's DSP via scipy.signal.welch
-    axis[3].plot(freq2, Pxx_density2)
+    axis[3].plot(PSD_w["frequencies"], PSD_w["psds"], label="_Python")
     # axis[3].set_title('DSP')
     axis[3].set_xlim(0)
     axis[3].set_ylabel("PSD signal.welch \n (µV²/Hz)")
     axis[3].set_xlabel("Frequency (Hz)")
     axis[3].grid()
+
+    # Superimpose to each PSD subplot other results (ex from matlab)
+    if external_results is not None:
+        PSD_fft_external = {
+            "frequencies": external_results[:, 0], "psds": external_results[:, 1]}
+        PSD_p_external = {
+            "frequencies": external_results[:, 2], "psds": external_results[:, 3]}
+        PSD_w_external = {
+            "frequencies": external_results[:, 4], "psds": external_results[:, 5]}
+
+        axis[1].plot(PSD_fft_external["frequencies"],
+                     PSD_fft_external["psds"], '--r', label="Matlab")
+        axis[2].plot(PSD_p_external["frequencies"],
+                     PSD_p_external["psds"], '--r', label="_Matlab")
+        axis[3].plot(PSD_w_external["frequencies"],
+                     PSD_w_external["psds"], '--r', label="_Matlab")
+
+        add_inset_zoom(ax=axis[1], x_data=(PSD_fft["frequencies"], PSD_fft_external["frequencies"]), y_data=(PSD_fft["psds"], PSD_fft_external["psds"]),
+                       zoom_region=(0, 20, 0, np.max(np.maximum(PSD_fft_external["psds"], PSD_fft["psds"]))))
+        add_inset_zoom(ax=axis[2], x_data=(PSD_p["frequencies"], PSD_p_external["frequencies"]), y_data=(PSD_p["psds"], PSD_p_external["psds"]),
+                       zoom_region=(0, 20, 0, 10))
+        add_inset_zoom(ax=axis[3], x_data=(PSD_p["frequencies"], PSD_w_external["frequencies"]), y_data=(PSD_w["psds"], PSD_w_external["psds"]),
+                       zoom_region=(0, 20, 0, 6))
+    else:
+        add_inset_zoom(ax=axis[1], x_data=PSD_fft["frequencies"], y_data=PSD_fft["psds"],
+                       zoom_region=(0, 50, 0, np.max(PSD_fft["psds"])))
+
+    figure.legend(title="Results source", loc="upper right")
     return PSD_fft, PSD_p, PSD_w
+
+
+def add_inset_zoom(ax: plt.Axes, x_data, y_data: np.ndarray, zoom_region: tuple):
+    """
+    Add a child inset axes plot to the given Axes object. Can show multiple overlapping series.
+    The child inset axes object inherits the line style of the parent plot.
+
+    Parameters:
+        ax (matplotlib.axes.Axes): The axes object to add the inset zoom to.
+        x_data (tuple of 1D array or array-like): x-coordinates of the data points.
+        y_data (tuple of 1D array or array-like): y-coordinates of the data points.
+            If a single array is provided, it represents a single series.
+            If a tuple of arrays is provided, array represents a separate series.
+        zoom_region (tuple): The region to be shown in the zoomed inset in the format (x1, x2, y1, y2).
+
+    Returns: axins object
+    """
+    # axins = zoomed_inset_axes(ax, zoom=zoom_factor, loc='upper right')
+    axins = inset_axes(ax, width=2, height=0.7, loc='upper right')
+
+    # Get the lines settings from the main plot to inherit them
+    lines = ax.get_lines()
+    if isinstance(y_data, tuple):
+        # if multiple series provided
+        for xserie, yserie, line in zip(x_data, y_data, lines):
+            axins.plot(xserie, yserie, color=line.get_color(), linestyle=line.get_linestyle(),
+                       linewidth=line.get_linewidth())
+
+    else:
+        line = lines[0]
+        # if single series provided
+        axins.plot(x_data, y_data, color=line.get_color(), linestyle=line.get_linestyle(),
+                   linewidth=line.get_linewidth())
+
+    x1, x2, y1, y2 = zoom_region
+    axins.set_xlim(x1, x2)
+    axins.set_ylim(y1, y2)
+    mark_inset(ax, axins, loc1=2, loc2=4, fc="none",
+               ec="0.5", lw=1.5, linestyle="--")
+    axins.tick_params(axis='both', which='both',
+                      labelleft=True, labelbottom=True)
+    axins.grid(visible=True, linestyle='--', linewidth=0.5)
+
 
 # =============================================================================
 ############################ Generate test signal  ############################
@@ -479,6 +586,21 @@ def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int,
 
 
 def generate_sine_wave(amplitude, frequency, duration, change_time, new_amplitude, sample_rate):
+    """
+    Generate a sine wave that change amplitude after a specific amount of time.
+
+    Parameters:
+        amplitude (float): Signal's original amplitude (A.U).
+        frequency (float): Signal's frequency (in Hz).
+        duration (float): Duration of the signal (in seconds).
+        change_time (float): Time  of amplitude change (in seconds).
+        new_amplitude (float): Signal's new amplitude (A.U).
+        sample_rate (float): Sampling rate of the signal (in Hz). 
+
+    Returns:
+        t (ndarray): Array of timepoints (in seconds).
+        signal (ndarray): Array of signal's amplitudes (A.U)
+    """
     t = np.linspace(0, duration, num=int(duration*sample_rate))
     signal = amplitude * np.cos(2 * np.pi * frequency * t)
     signal2 = new_amplitude * np.sin(2 * np.pi * frequency * t)
@@ -486,9 +608,6 @@ def generate_sine_wave(amplitude, frequency, duration, change_time, new_amplitud
     # Change amplitude after a certain time
     change_index = int(change_time * sample_rate)
     signal[change_index:] = signal2[change_index:]
-
-    """signal[change_index:] = new_amplitude * \
-        np.sin(2 * np.pi * frequency * t[change_index:])"""
 
     return t, signal
 # =============================================================================

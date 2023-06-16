@@ -16,6 +16,14 @@ from scipy.signal import welch
 from my_functions import *
 from my_filters import *
 
+
+# Ensure that the root directory is the project directory
+
+# if pwd is SRC  change to root
+if os.getcwd().split("/")[-1] == "SRC":
+    os.chdir("..")
+print("Current working directory: ", os.getcwd())
+
 plt.close("all")  # close all figure windows
 
 # =============================================================================
