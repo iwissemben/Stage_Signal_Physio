@@ -20,9 +20,11 @@ from my_filters import *
 # Ensure that the root directory is the project directory
 
 # if pwd is SRC  change to root
-if os.getcwd().split("/")[-1] == "SRC":
+print("Current working directory: ", os.getcwd())
+if os.path.basename(os.getcwd()) == "SRC":
     os.chdir("..")
 print("Current working directory: ", os.getcwd())
+print(os.path.basename(os.getcwd()))
 
 plt.close("all")  # close all figure windows
 
