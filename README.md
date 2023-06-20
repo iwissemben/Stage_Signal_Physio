@@ -40,7 +40,7 @@ Screencaps of the steps :
 |:-----------------:|:---------------------------------------------------------------:|:---------------------------------------------------------------:|
 | 2.1 - 2.2         | [1](HELP/screencaps/windows/windows_conda_create_env_f.PNG)     |[A](HELP/screencaps/macos/macos_conda_create_env.png)|
 | 2.3 - 3           | [2](HELP/screencaps/windows/windows_conda_created_env.PNG)      |[B1](HELP/screencaps/macos/macos_conda_created_env.png) [B2](HELP/screencaps/macos/macos_conda_loaded_env.png)|
-| 4                 | [3](HELP/screencaps/windows/windows_conda_loading_worked.PNG)   |[C](HELP/screencaps/windows/windows_conda_loading_worked.PNG) |
+| 4                 | [3](HELP/screencaps/windows/windows_conda_loading_worked.PNG)   |[C](HELP/screencaps/macos/macos_loading_worked.png) |
 
 ## Structure 
 
