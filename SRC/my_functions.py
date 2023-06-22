@@ -525,9 +525,19 @@ def compute_welch_estimation_on_segment2(segment, sample_rate, nfft: None):
     """
 
     segment_length = len(segment)  # number of points in the segment
+    sub_segment_length=segment_length/4
     # split the segment in two sub segments with overlap of 50%
-    freqs, Pxx_density = welch(segment, fs=sample_rate, window=hamming(segment_length, sym=False), nperseg=segment_length, nfft=nfft,
-                               noverlap=True, detrend="constant", axis=0)
+    freqs, Pxx_density = welch(segment, fs=sample_rate,
+                               window="hann",
+                               nperseg=sub_segment_length,detrend=False,
+                               noverlap=sub_segment_length//2,nfft=None,axis=0)
+    """
+    freqs, Pxx_density = welch(segment, fs=sample_rate, 
+                                window=hamming(segment_length, sym=False),
+                                nperseg=segment_length, nfft=nfft,
+                                noverlap=True, detrend=False, axis=0)
+    """
+
     """ old
             freq, Pxx_density = welch(signal[lower_end:reference_end+1],
                                   fs=sample_rate, window="hann",
