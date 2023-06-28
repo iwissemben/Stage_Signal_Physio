@@ -1,0 +1,37 @@
+To deactivate an env: conda deactivate
+To list the environnements : conda info --envs
+
+To create a new environnement: conda create -n wissem_venv python=3.11.3
+
+To activate an environnement: conda activate wissem_venv
+
+To delete an environnement and its packages : conda remove --name wissem_venv --all
+To delete a package: conda remove package-name
+
+To install a specific version of python in an environement:  conda install python=3.11.3
+
+
+To export an environnement:
+- 1 - Activate the env to export: conda activate wissem_venv
+- 2 - Export as yml file:
+	- A - (to export all packages and additional libraries that solve for dependencies - with build versions)
+		- conda env export > ./HELP/environnement/wissem_venv_ex.yml 
+	- B - (to export all libraries and dependencies - without build versions)
+		- conda env export --no-builds > ./HELP/environnement/wissem_venv_nb.yml 
+	- C - (to export only explicitly installed libraries - without build versions)
+		-conda env export --from-history > ./HELP/environnement/wissem_venv.yml
+- 3 - Create environement from yaml file:
+	- conda env create -f ./HELP/environnement/wissem_venv.yml
+- 4 - Activate the newly created environnement:
+	- conda activate wissem_venv
+
+Note 1: The environement name and its python version can be found in the yml file.
+
+Note 2: Only method 2-C for exportation allows replication of the environement both on macOS and windows.
+
+Note 3: Method 2-C Ignores the required downloading channels, must be added mannualy or else gives error "resolvepackagenotfound".
+
+Note 4: Tested on macos High Sierra vm, with VSCode and Anaconda. The .py scripts works, issues running jupyter notebooks (due to GPU configuration missing)
+
+		
+

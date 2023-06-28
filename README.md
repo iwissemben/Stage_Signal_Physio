@@ -7,7 +7,7 @@ This repository is dedicated to my end of master internship. The aim of the inte
 
 For this project I joined the ReArm research team, and their work serve as a guide to my project.
 
-The first phase of the project is to analyze EEG signal. I hope to work on fNIRS and motion-tracking data too. 
+The first phase of the project is to analyze EEG signal. I hope to work on fNIRS and motion-tracking data next. 
 
 ## Table of contents
 * [Description](#Description)
@@ -17,14 +17,31 @@ The first phase of the project is to analyze EEG signal. I hope to work on fNIRS
 
 ## Installation
 
-- Import the project using GitHub and GitHub desktop application by cloning the repository to your computer.
-- Install the required libraries in your environment for the first run (I will share mine soon to simplify this step). 
-- Run the script you want ('EEG_script.py' for instance) with your favorite code editor in the right environment.
+1. Import the project using GitHub and GitHub desktop application by cloning the repository to your computer.
+ - [x]  In the project folder check that you can find the `Stage_Signal_Physio/HELP/environnement` folder and the `wissem_venv.yml` file inside.
+2. For the first run, replicate the environement using terminal:
+   - **List** all your conda environnements : `conda info --envs`
+     - If the `wissem_venv` environnement **is listed**, it is already installed.
+     - If you want to delete it: `conda remove --name wissem_venv --all`
+     - If `wissem_venv` **is not listed**, create it (2.2).
+   - **Create** the environnement from yaml file : `conda env create -f ./HELP/environnement/wissem_venv.yml`
+   - **Verify creation** of `wissem_venv` environnement : `conda info --envs`
+3. **Activate** wissem_venv : `conda activate wissem_venv`
+   - **Verify activation** of wissem_venv : `conda info --envs`. Active env should be highlighted like following: `wissem_venv*`
+5. 🎉You are all set! 🥳
+- Run the script you want (`EEG_script.py` for instance) with your favorite code editor in the right environment.
 
 ```python
   x="Hello World"
   print("Hello World")
 ```
+Screencaps of the steps :
+| STEP              | Windows                                                         | macOS                                                                                                        |
+|:-----------------:|:---------------------------------------------------------------:|:---------------------------------------------------------------:|
+| 2.1 - 2.2         | [1](HELP/screencaps/windows/windows_conda_create_env_f.PNG)     |[A](HELP/screencaps/macos/macos_conda_create_env.png)|
+| 2.3 - 3           | [2](HELP/screencaps/windows/windows_conda_created_env.PNG)      |[B1](HELP/screencaps/macos/macos_conda_created_env.png) [B2](HELP/screencaps/macos/macos_conda_loaded_env.png)|
+| 4                 | [3](HELP/screencaps/windows/windows_conda_loading_worked.PNG)   |[C](HELP/screencaps/macos/macos_loading_worked.png) |
+
 ## Structure 
 
 The project Stage_Signal_Physio is organized as a directory with the following structure:
@@ -69,6 +86,8 @@ This folder contains the scripts to run. Each is dedicated to study a subject. T
 
 - 'EEG_script.py' it reads the raw data (.xdf file in DAT/INPUT), and processes the EEG signal to obtain the ERSP and represents each electrode's signal in a time frequency plot (cf. [Kosei Nakayashiki publication](https://pubmed.ncbi.nlm.nih.gov/24886610/)).
 - 'my_functions.py' and 'my_filters.py' are scripts that contain custom functions. These are like tailor-made toolboxes that are called in other scripts such as 'EEG_script.py'.
+
+
 
 ## FAQ
 ### What is the aim of the EEG part of the internship?
