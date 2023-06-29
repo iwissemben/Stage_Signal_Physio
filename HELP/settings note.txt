@@ -9,4 +9,27 @@ Settings help for VS Code:
 	-search "jupyter file root" 
 	-and change the file root: ${fileDirname}" to "${workspaceRoot}"
 -If plots rendered inside jupyter's cells aren't zoomable add '%matplotlib widget' line at the begining of the notebook. Eventually install the library 'ipympl' V.0.9.0.
+
+- To export environement as a cross platform yaml file:
+
+	- Lister les environnements et librairies d'un environnement
+		- VScode: conda info --envs
+		- VScode: conda list -n venv_STAGE_SIGNAL_EEG_202305164
+		- VScode: conda remove --name wissem_venv_11062023 --all (Si environnement préexistant)
+	- Creer un fichier yaml crossplatform pour répliquer envionnement sur autres machines:
+
+
+		-1 - export-VSCODE: conda env export --name venv_STAGE_SIGNAL_EEG_20230516 --file ./HELP/wissem_venv_11062023.yaml
+
+		-1bis - export-VSCODE: conda env export --name venv_STAGE_SIGNAL_EEG_20230516 --file ./HELP/wissem_venv_11062023.yaml --no-builds
+		- Rq: Utiliser l'argument --no-builds genere le .yaml mais lorsqu'on l'installe sous windows erreur, resoudre le pb pour mac os
+
+		-1 bis - conda env export -n venv_STAGE_SIGNAL_EEG_20230516 --file ./HELP/wissem_venv_11062023V3.yaml  --from-history
+	- Creer environnement à partir du fichier yaml
+
+		-2 - creation env-VSCODE (avec builds) (windows OK /macOS checker):  conda env create -f .\HELP\wissem_venv_11062023.yaml 
+		-2 - creation env-VSCODE (sans builds) (windows /macOS checker): conda env create --name wissem_venv_11062023 --file .\HELP\wissem_venv_11062023.yaml --offline --no-deps
+
+	-Sources:
+		- https://stackoverflow.com/questions/58009732/managing-conda-env-in-cross-platform-environment
  

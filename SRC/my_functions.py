@@ -143,71 +143,33 @@ def mosaic_plot(figure, axis, filename: str, x: np.ndarray, y: np.ndarray, fig_t
 # =============================================================================
 
 
-def fft_create_positive_frequency_vector(signal: np.ndarray, Sampling_rate: int | float):
-    """
-    produces a positive frequency vector for fft
+def fft_compute_on_single_channel2(signal, Fs):
+    N = np.shape(signal)[0]
+    f_res = Fs/N  # freq res
 
-    inputs: numpy.ndarray(2D) and float as EEG_channels_signal and Sampling_rate
-    outputs: Dictionary [key1:array1,key2:array2] as [frequencies:values,amplitudes:values]
-    """
-    # Return the Discrete Fourier Transform sample positive frequencies.
-    fft_frequencies = np.fft.fftfreq(len(signal), d=1/Sampling_rate)
-    print("fft_frequencies last value", fft_frequencies[-1])
-    print("fft_frequencies len ", len(fft_frequencies))
+    freq_vect = np.linspace(0, (N-1)*f_res, N)
+    amplitude_fft = np.fft.fft(signal)
+    amplitude_fft_magnitude = np.abs(amplitude_fft)/N
 
-    # last coordinate not comprised
-    print("coordin: ", (len(fft_frequencies)//2))
-    fft_frequencies = fft_frequencies[0:(len(fft_frequencies)//2)]
-    print("fft_frequencies half last value: ",  fft_frequencies[-1])
-    print("fft_frequencies half len ", len(fft_frequencies))
-    return fft_frequencies
+    freq_vect_for_plot = freq_vect[0:int(N/2+1)]  # +1 cf slicing
+    amplitude_fft_magnitude_for_plot = 2*amplitude_fft_magnitude[0:int(N/2+1)]
+    return freq_vect_for_plot, amplitude_fft_magnitude_for_plot
 
 
-def fft_compute_on_single_channel(signal: np.ndarray):
-    """
-    Function that performs the fft of a single channel (column)
+def compute_fft_on_all_channels2(channels_signals: np.ndarray, Fs: int | float):
+    channels_fft_frequencies = []
+    channels_fft_magnitudes = []
 
-    Only returns the returns the FFT result associated with positive frequencies.
+    for signal in channels_signals.T:
+        frequencies, magnitudes = fft_compute_on_single_channel2(signal, Fs)
+        channels_fft_frequencies.append(frequencies)
+        channels_fft_magnitudes.append(magnitudes)
 
-    inputs: numpy.ndarray(2D) as signal of an electrode
-    outputs: Dictionary [key1:array1,key2:array2] as [frequencies:values,amplitudes:values]
-    """
-    # Return the FFT signal of positive frequencies.
-    fft_signal = abs(np.fft.fft(signal))
-    print("fft_signal length: ", len(fft_signal))
-    fft_signal = fft_signal[0:(len(fft_signal)//2)]
-    # fft_signal = fft_signal[0:(len(fft_signal)//2)]
-    # print("fft_signal half length: ", len(fft_signal))
+    channels_fft_frequencies = np.transpose(np.array(channels_fft_frequencies))
+    channels_fft_magnitudes = np.transpose(np.array(channels_fft_magnitudes))
 
-    return fft_signal
-
-
-def compute_fft_on_all_channels(EEG_channels_signal: np.ndarray, Sampling_rate: int | float):
-    """
-    Function that computes the FFT on each channel.
-
-    Each column of the 2d signal array is the signal of an electrode.
-    Iterates over each column to compute its FFT, on positive frequencies.
-    Returns a 2 key dictionary (frequencies,results eeg) associated with 2 arrays.
-
-    inputs: numpy.ndarray(2D) and float as EEG_channels_signal and Sampling_rate
-    outputs: Dictionary [key1:array1(1D),key2:array2(2D)] as [frequencies:values,amplitudes:values per electrodes]
-    """
-    # Create positive vector of frequencies
-    frequencies = fft_create_positive_frequency_vector(
-        EEG_channels_signal, Sampling_rate)
-
-    # compute fft iteratively on each channel, store them in array, each column an electrode
-    FFT_Results_EEG_channels = []
-    for column in EEG_channels_signal.T:
-        fft_signal_electrodei = fft_compute_on_single_channel(column)
-        FFT_Results_EEG_channels.append(fft_signal_electrodei)
-
-    # Consistent shaping of data
-    FFT_Results_EEG_channels = np.array(FFT_Results_EEG_channels)
-    FFT_Results_EEG_channels = FFT_Results_EEG_channels.transpose()
-
-    return {"fft_frequencies": frequencies, "FFT_Results_EEG_channels": FFT_Results_EEG_channels}
+    return {"FFT_frequencies": channels_fft_frequencies,
+            "FFT_magnitudes": channels_fft_magnitudes}
 # =============================================================================
 ########################## Cutoff frequency corrector  ########################
 # =============================================================================
@@ -263,7 +225,8 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
     for i in range(len(markers)):
         original_time_stamp = markers[i, 0]
         # array of differences beween the eeg times and the original marker' timestamp
-        difference_array = np.absolute(EEG_times_stamps-original_time_stamp)
+        difference_array = np.absolute(
+            EEG_times_stamps-original_time_stamp)
         # find the index of the minimal difference in the markers times stamps (nearest timestamp)
         index = difference_array.argmin()
         # append it to the liste of nearest timestamps
@@ -271,7 +234,8 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
         nearest_time_stamps_indices.append(index)
 
     nearest_time_stamps = np.array(nearest_time_stamps)
-    nearest_time_stamps_indices = np.array(nearest_time_stamps_indices)
+    nearest_time_stamps_indices = np.array(
+        nearest_time_stamps_indices)
     nearest_indices_timestamps = np.column_stack(
         (nearest_time_stamps_indices, nearest_time_stamps))
 
@@ -282,7 +246,7 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
 # =============================================================================
 
 
-def get_segment_coordinates(reference_index: int, segment_length: int):
+def get_segment_coordinates(reference_index: int, segment_length: int, debug: bool = False):
     """
     Computes the coordinates of a segment for psd calculation
 
@@ -293,21 +257,23 @@ def get_segment_coordinates(reference_index: int, segment_length: int):
     # Define the segment coordinates (start,end)
     # PSD on a range of time delta_time before the time stamp
     lower_end = int(reference_index)-segment_length
-    print("lower_end:", lower_end)
+    # print("lower_end:", lower_end)
 
     # PSD on a range of time delta_time after the time stamp
     higher_end = int(reference_index)+segment_length
-    print("Higher_end:", higher_end)
+    # print("Higher_end:", higher_end)
 
     # index_range=np.arange(lower_range,int(timestamp_index)+1)
     # +1 to inclue the value at the time stamp
     reference_end = int(reference_index)
 
-    print("segment coordinates before marker:", "(", lower_end, ";",
-          reference_end, "), delta_index:", segment_length)
+    if debug is True:
 
-    print("segment coordinates after marker:", "(", reference_end, ";",
-          higher_end, "), delta_index:", segment_length)
+        print("segment coordinates before marker:", "(", lower_end, ";",
+              reference_end, "), delta_index:", segment_length)
+
+        print("segment coordinates after marker:", "(", reference_end, ";",
+              higher_end, "), delta_index:", segment_length)
     return lower_end, higher_end, reference_end
 
 
@@ -601,8 +567,13 @@ def generate_sine_wave(amplitude, frequency, duration, change_time, new_amplitud
         t (ndarray): Array of timepoints (in seconds).
         signal (ndarray): Array of signal's amplitudes (A.U)
     """
-    t = np.linspace(0, duration, num=int(duration*sample_rate))
+    """    t = np.linspace(0, duration, num=int(duration*sample_rate))
     signal = amplitude * np.cos(2 * np.pi * frequency * t)
+    """
+    
+    # t = np.arange(0, (sample_rate*duration), (1/sample_rate))
+    t = np.linspace(0, duration, num=int(duration*sample_rate), endpoint=False)
+    signal = amplitude * np.sin(2 * np.pi * frequency * t)
     signal2 = new_amplitude * np.sin(2 * np.pi * frequency * t)
 
     # Change amplitude after a certain time
@@ -639,3 +610,117 @@ def compute_average_ratio_for_event_on_blocks_for_all_electrodes(mat3d):
         mean_per_row_per_plane_test_block2)
 
     return mean_per_row_per_plane_test_block1, mean_per_row_per_plane_test_block2
+
+# =============================================================================
+############################ New compute lagged PSD  ##############################
+# =============================================================================
+
+
+def get_segment_coordinates2(reference_index, segment_time_length, sample_rate):
+    """
+    Gives the indices of a
+
+    Gives the coordinate of segments of specific time length around reference index.
+    segment_time_length: expressed in seconds
+
+    retunrs coordinates (lower , reference , and higher coordinates)
+    """
+    nperseg = segment_time_length*sample_rate  # number of points in the segment
+    reference_end = reference_index
+    lower_end = reference_index - nperseg
+    higher_end = reference_index + nperseg
+    # print("lower end: ", lower_end, ",reference: ",reference_end, "higher end: ", higher_end)
+    return {"reference_end": reference_end, "lower_end": lower_end, "higher_end": higher_end}
+
+
+def get_signal_segement2(signal, lower_end: int, higher_end: int):
+    """
+    Slice the signal between two indices and returns the segmented signal
+    """
+    signal_length = len(signal)
+    signal_segment = signal[lower_end:(higher_end+1)]  # cf python slicing
+    return signal_segment, signal_length
+
+
+def compute_welch_estimation_on_segment2(segment, sample_rate, nfft: None):
+    """
+    Compute PSD using welch method on segment
+    """
+
+    segment_length = len(segment)  # number of points in the segment
+    sub_segment_length=segment_length/4
+    # split the segment in two sub segments with overlap of 50%
+    freqs, Pxx_density = welch(segment, fs=sample_rate,
+                               window="hann",
+                               nperseg=sub_segment_length,detrend=False,
+                               noverlap=sub_segment_length//2,nfft=None,axis=0)
+    """
+    freqs, Pxx_density = welch(segment, fs=sample_rate, 
+                                window=hamming(segment_length, sym=False),
+                                nperseg=segment_length, nfft=nfft,
+                                noverlap=True, detrend=False, axis=0)
+    """
+
+    """ old
+            freq, Pxx_density = welch(signal[lower_end:reference_end+1],
+                                  fs=sample_rate, window="hann",
+                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)
+    """
+
+    return freqs, Pxx_density
+
+
+def compute_welch_on_a_signal_before_each_marker(signal, sample_rate, marker_times, segment_duration):
+    """
+    marker_times is an array in which the first column must correspond to the indices of the markers timestamps in the signal time vector
+    """
+    N = len(signal)
+    freqs_for_all_markers = []
+    PSDs_for_all_markers = []
+    for marker in marker_times[:, 0]:
+
+        segment_coordinates = get_segment_coordinates2(
+            reference_index=marker, segment_time_length=segment_duration, sample_rate=sample_rate)
+
+        higher_end = int(segment_coordinates["reference_end"])
+        lower_end = int(segment_coordinates["lower_end"])
+
+        signal_segment, full_signal_length = get_signal_segement2(
+            signal=signal, lower_end=lower_end, higher_end=higher_end)
+        freqs, Pxx_density = compute_welch_estimation_on_segment2(
+            signal_segment, sample_rate=sample_rate, nfft=N)
+        freqs_for_all_markers.append(freqs)
+        PSDs_for_all_markers.append(Pxx_density)
+
+    freqs_for_all_markers = np.column_stack(freqs_for_all_markers)
+    PSDs_for_all_markers = np.column_stack(PSDs_for_all_markers)
+
+    return {"PSD_frequencies": freqs_for_all_markers, "PSD_magnitudes": PSDs_for_all_markers}
+
+
+def compute_welch_on_a_signal_after_each_marker(signal, sample_rate, marker_times, segment_duration):
+    """
+    marker_times is an array in which the first column must correspond to the indices of the markers timestamps in the signal time vector
+    """
+    N = len(signal)
+    freqs_for_all_markers = []
+    PSDs_for_all_markers = []
+    for marker in marker_times[:, 0]:
+
+        segment_coordinates = get_segment_coordinates2(
+            reference_index=marker, segment_time_length=segment_duration, sample_rate=sample_rate)
+
+        higher_end = int(segment_coordinates["higher_end"])
+        reference_end = int(segment_coordinates["reference_end"])
+
+        signal_segment, full_signal_length = get_signal_segement2(
+            signal=signal, lower_end=reference_end, higher_end=higher_end)
+        freqs, Pxx_density = compute_welch_estimation_on_segment2(
+            signal_segment, sample_rate=sample_rate, nfft=N)
+        freqs_for_all_markers.append(freqs)
+        PSDs_for_all_markers.append(Pxx_density)
+
+    freqs_for_all_markers = np.column_stack(freqs_for_all_markers)
+    PSDs_for_all_markers = np.column_stack(PSDs_for_all_markers)
+
+    return {"PSD_frequencies": freqs_for_all_markers, "PSD_magnitudes": PSDs_for_all_markers}
