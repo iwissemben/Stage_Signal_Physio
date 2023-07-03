@@ -5,6 +5,9 @@ import numpy as np
 from scipy.signal import welch, periodogram, get_window, hamming, boxcar
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset, inset_axes
 
+from my_filters import *
+
+
 # =============================================================================
 ############################# Stream_Finder_by_name  ##########################
 # =============================================================================
@@ -612,7 +615,7 @@ def compute_average_ratio_for_event_on_blocks_for_all_electrodes(mat3d):
     return mean_per_row_per_plane_test_block1, mean_per_row_per_plane_test_block2
 
 # =============================================================================
-############################ New compute lagged PSD  ##############################
+############################ New compute lagged PSD  ##########################
 # =============================================================================
 
 
@@ -654,19 +657,6 @@ def compute_welch_estimation_on_segment2(segment, sample_rate, nfft: None):
                                window="hann",
                                nperseg=sub_segment_length,detrend=False,
                                noverlap=sub_segment_length//2,nfft=None,axis=0)
-    """
-    freqs, Pxx_density = welch(segment, fs=sample_rate, 
-                                window=hamming(segment_length, sym=False),
-                                nperseg=segment_length, nfft=nfft,
-                                noverlap=True, detrend=False, axis=0)
-    """
-
-    """ old
-            freq, Pxx_density = welch(signal[lower_end:reference_end+1],
-                                  fs=sample_rate, window="hann",
-                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)
-    """
-
     return freqs, Pxx_density
 
 
@@ -724,3 +714,119 @@ def compute_welch_on_a_signal_after_each_marker(signal, sample_rate, marker_time
     PSDs_for_all_markers = np.column_stack(PSDs_for_all_markers)
 
     return {"PSD_frequencies": freqs_for_all_markers, "PSD_magnitudes": PSDs_for_all_markers}
+
+
+# =============================================================================
+############################# Signal preprocessing  ###########################
+# =============================================================================
+def detrend_signals(raw_signals:np.array):
+    """
+    Remove linear trends from signals.
+
+    Parameters
+    ----------
+    raw_signals : ndarray
+        Array of raw signals arranged as columns.
+
+    Returns
+    ----------
+    EEG_amplitudes_centered : ndarray
+        Array of detrended signals arranged as columns (same shape as raw_signals).
+    """
+    print(f"input_signals shape:\n {raw_signals.shape}")
+    print(f"input_signals mean per signal:\n {np.mean(raw_signals,axis=0)}")
+    EEG_amplitudes_centered=raw_signals-np.mean(raw_signals,axis=0)
+    return EEG_amplitudes_centered
+
+def rereference_signals(input_signals:np.array):
+    """
+    Reference signals to average.
+
+    Parameters
+    ----------
+    input_signals : ndarray
+        Array of signals arranged as columns.
+
+    Returns
+    ----------
+    EEG_amplitudes_rereferenced : ndarray
+        Array of signals arranged as columns (same shape as input_signals).
+    """
+    print(f"input_signals shape:{input_signals.shape}")
+    print(f"input_signals whole mean:{np.mean(input_signals)}")
+    EEG_amplitudes_rereferenced=input_signals-np.mean(input_signals)
+    
+    return EEG_amplitudes_rereferenced
+
+def filter_signal(input_signals:np.array,sample_rate:int,order:int,cutofffreq:tuple):
+    """
+    Applies a series of filters on signals.
+    The first two input frequencies of the tuple cutofffreq are corrected before use by the adequate filters.
+
+    Parameters
+    ----------
+    input_signals : ndarray
+        Array of signals arranged as columns.
+    sample_rate : int
+        Sampling rate of the signals.
+    order : int
+        Order of the band pass filter. Also required to apply right correction to cutofffreq[0,2]
+    cutofffreq : tuple
+        Cutoff frequencies to be used by filters. 
+        Tuple must be len(cutofffreq) = 2 or 3.
+        Ordered as: cutofffreq=(low_cutoff_freq,low_cutoff_freq,notch_cutoff_freq)
+        
+
+    Returns
+    ----------
+    EEG_Filtered_NOTCH_BP : ndarray
+        Array of signals arranged as columns (same shape as input_signals).
+    freq_test_BP : ndarray
+        Frequency vector for verification of the filter response.
+    magnitude_test_BP : ndarray
+        magnitude vector for verification of the filter response.
+    """
+    if len(cutofffreq) < 2 or len(cutofffreq) > 3:
+        raise ValueError(f"cutofffreq tuple length:{len(cutofffreq)} - Input tuple length must be between 2 and 3")
+    try:
+        if len(cutofffreq)==3:
+            LOW_CUTOFF_FREQ_THEORETICAL,HIGH_CUTOFF_FREQ_THEORETICAL,NOTCH_CUTOFF_FREQ=cutofffreq
+        elif len(cutofffreq)==2:
+            LOW_CUTOFF_FREQ_THEORETICAL,HIGH_CUTOFF_FREQ_THEORETICAL=cutofffreq
+            NOTCH_CUTOFF_FREQ=None
+        # cutoff frequency correction for filtfilt application
+        LOW_CUTOFF_FREQ_CORRECTED = filtfilt_cutoff_frequency_corrector(
+            order, LOW_CUTOFF_FREQ_THEORETICAL, sample_rate, pass_type="high_pass")
+
+        HIGH_CUTOFF_FREQ_CORRECTED = filtfilt_cutoff_frequency_corrector(
+            order, HIGH_CUTOFF_FREQ_THEORETICAL, sample_rate, pass_type="low_pass")
+
+        """        print("LOW_CUTOFF_FREQ_THEORETICAL="+str(LOW_CUTOFF_FREQ_THEORETICAL) +
+            ", HIGH_CUTOFF_FREQ_THEORETICAL="+str(HIGH_CUTOFF_FREQ_THEORETICAL))
+                print("LOW_CUTOFF_FREQ_CORRECTED="+str(LOW_CUTOFF_FREQ_CORRECTED) +
+            ", HIGH_CUTOFF_FREQ_CORRECTED="+str(HIGH_CUTOFF_FREQ_CORRECTED))"""
+        
+        print(f"LOW_CUTOFF_FREQ_THEORETICAL={LOW_CUTOFF_FREQ_THEORETICAL},HIGH_CUTOFF_FREQ_THEORETICAL={HIGH_CUTOFF_FREQ_THEORETICAL}")
+        print(f"LOW_CUTOFF_FREQ_CORRECTED={LOW_CUTOFF_FREQ_CORRECTED},HIGH_CUTOFF_FREQ_CORRECTED={HIGH_CUTOFF_FREQ_CORRECTED}")
+
+
+
+
+        # Filtering on all channels
+        if NOTCH_CUTOFF_FREQ is not None:
+            # 1-Notch-filter 50Hz [49,51] the centered-rereferenced signal
+            input_signal, freqs_test_NOTCH, magnitudes_test_NOTCH = notch_filter(input_signal=input_signals,
+                                                                                    sample_rate=sample_rate,
+                                                                                    cutoff_freq=NOTCH_CUTOFF_FREQ,
+                                                                                    stop_band_width=2)
+
+        # 2-Then Band-pass filter the signal filtered by notch
+        EEG_Filtered_NOTCH_BP, freq_test_BP, magnitude_test_BP = band_pass_filter(input_signal=input_signals,
+                                                                                sample_rate=sample_rate,
+                                                                                low_cutoff_freq=LOW_CUTOFF_FREQ_CORRECTED,
+                                                                                high_cutoff_freq=HIGH_CUTOFF_FREQ_CORRECTED,
+                                                                                filter_order=order)
+        print("Filtered signal shape:",np.shape(EEG_Filtered_NOTCH_BP))
+    except UnboundLocalError :
+        print(f"Specified cutofffreq={cutofffreq} - The tuple must contain only 2 or 3 elements as (low_cutoff_freq,high_cutoff_freq,notch_cutoff_freq)")
+    return EEG_Filtered_NOTCH_BP, freq_test_BP, magnitude_test_BP
