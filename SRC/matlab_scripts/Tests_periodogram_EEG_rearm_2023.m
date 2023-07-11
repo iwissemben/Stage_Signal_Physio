@@ -3,18 +3,57 @@ close
 
 
 % 1 - Import eeg recording in csv (raw xdf exported with export_signals.ipynb)
-    %1.1 - Import csv file
-        FILENAME='../../DAT/INPUT/001_MolLud_20201112_1_c_499.998_Hz.csv';
-        csv_data = readmatrix(FILENAME);
+    % 1.1 - Import csv file
+        %input_filepath='../../DAT/INPUT/001_MolLud_20201112_1_c_raw_499.998_Hz.csv';
+        input_filepath='../../DAT/INPUT/001_MolLud_20201112_1_c_prepro_499.998_Hz.csv';
+        csv_data = readmatrix(input_filepath);
         %table =readtable('../../DAT/INPUT/001_MolLud_20201112_1_c_499.998Hz.csv');
-    %1.2 - tidy data
-        EEG_raw_amplitudes = csv_data(:,1:8);
-        EEG_times = csv_data(:,9);
-    %1.3 - data infos
+    % 1.2 - tidy data
+        numb_of_channels = size(csv_data,2)-1; %find the number of channels, last column is for times vector
+        EEG_raw_amplitudes = csv_data(:,1:numb_of_channels);
+        EEG_times = csv_data(:,end);
+    % 1.3 - data infos
         N = length(EEG_raw_amplitudes); %number of samples per electrode
-        t=split(FILENAME,"_")
-        Fs = round(str2double(t{end-1})) %sampling frequency (Hz)
+        %get sampling frequency from file name
+        t=split(input_filepath,"_");
+        Fs = round(str2double(t{end-1})); %sampling frequency (Hz)
+    % 1.5- Define channel names
+        channels_dict = ["Channel_1_C4","Channel_2_FC2","Channel_3_FC6","Channel_4_CP2","Channel_5_C3","Channel_6_FC1","Channel_7_FC5","Channel_8_CP1"];
 
+    % 1.4 - Select electrode to study
+        select_channel_number = [1,5]; %1d matrix of selected channels
+        if all(select_channel_number <= numb_of_channels)
+            fprintf("Selected channel: %g\n",select_channel_number);
+            disp("Selected channels found.");
+        else
+            error("one or more of the selected channel does not exist.");
+        end
+
+%loop over channels
+for element=select_channel_number % loop over each number
+    %disp(element); %show the channel number
+    fprintf("Processing channel: %s \n",channels_dict(element)); %find its corresponding name
+    signal=EEG_raw_amplitudes(:,element); %get the corresponding signal
+
+% 3 - PSD estimations
+        [PSD_fft,PSD_p,PSD_w]=estimate_signal_psds(signal,Fs); %compute the psd estimations over the selected signal
+
+% 4 - export the PSD estimations of the signal
+    % 4.1 - Define export file name & path
+        [~, input_filename, ~] = fileparts(input_filepath); %get input file name from filepath
+        export_filename="MATLAB_PSD_res_EEG_"+channels_dict(element)+"_"+input_filename; %define output filename
+        export_filepath="../../DAT/OUTPUT/"+export_filename;
+    % 4.2 - Export PSD results to csv
+        results=[PSD_fft,PSD_p,PSD_w];
+        header=["f_fft","PSDfft","fm","PSDm","fw","PSDw"];
+        table_to_export=export_psds_csv(export_filepath,results,header);
+
+% 5 - Show PSD estimations results
+    show_psd_results(signal,Fs,table_to_export,channels_dict(element));
+    fprintf("Processing %s : done \n",channels_dict(element)); %find its corresponding name
+end
+
+%{
 % 2 - Signal preprocessing
     % 2.1 - Centering
         % compute average of each column of EEG_raw_amplitudes
@@ -31,100 +70,10 @@ close
         whole_average=mean(EEG_centered_amplitudes,"all")
         EEG_rereferenced_amplitudes = EEG_centered_amplitudes - whole_average;
     % 2.3 - Filtering
-
-% 3 - PSD estimations
-
-psd_estimations(6,6)
-
-    
-
-% 4 - Export results
-    % 4.1 - Select electrodes
-    % 4.2 - Export to csv file
-
-
-%{
-x = load('../../DAT/INPUT/EEG_1channel_1000Hz.txt');%pour charger le signal expérimental
-Fs = 1000;%fréquence d'échantillonnage
-Ps = 1/Fs;%période d'échantillonnage
-xc = x-mean(x);%pour centrer le signal
-N = length(xc);%pour avoir le nombre d'échantillons du signal
-
-t = 0:Ps:(N-1)*Ps;%échelle de temps physique
-
-f = 0:(Fs/N):Fs/2;%échelle des fréquences en respectant la limite de Shannon Fs/2
-
-%Calcul du périodogramme (estimateur de la DSP) "de base et à la main" via la fonction fft
-Xfft = fft(xc);%calcul de la transformée de Fourier rapide
-PSD = (abs(Xfft).^2)/(N*Fs);%calcul du périodogramme à partir du module au carré de la fft
-
-%Calcul du périodogramme avec la fonction Matlab directement, pour
-%comparaison
-[PSDm,fm] = periodogram(xc,rectwin(N),f,Fs);%version two-sided (cf. help) qui correspond
-% à la même échelle que la version précédente
-
-%Calcul du périodogramme de Welch avec un fenêtrage de Hamming, des tailles
-%de fenêtres de 1000 points (1 seconde) et un overlap de 500 points
-[PSDw,fw] = pwelch(xc,hamming(1000),500,N,Fs);
-
-%Exportation des resultats de PSD
-matricePSDpw_titres=["f_fft","PSDfft","fm","PSDm","fw","PSDw"]
-matricePSDfftpw=horzcat(f',PSD(1:length(f)),fm',PSDm',fw,PSDw)
-
-table_complete= array2table(matricePSDfftpw,'VariableNames',matricePSDpw_titres)
-
-writetable(table_complete,'../../DAT/OUTPUT/MATLAB_EEG_PSDs_data_1000Hz.csv',Delimiter=";",WriteMode="overwrite")
-%dlmwrite('../../DAT/OUTPUT/MATLAB_EEG_PSDs_data_1000Hz.csv', matricePSDfftpw, 'delimiter', ';', 'precision', 100);
-
-figure
-subplot(4,1,1)
-plot(t,xc,'-b')
-xlim([0 t(end)])
-xlabel('Temps (s)')
-ylabel('Signal EEG')
-grid on
-subplot(4,1,2)
-plot(f,PSD(1:length(f))','-b','LineWidth',1)%on se limite à une échelle de fréquence limitée à Fs/2
-xlabel('Fréquence (Hz)')
-ylabel('DSP par fft')
-grid on
-subplot(4,1,3)
-plot(fm,PSDm,'g')
-xlabel('Fréquence (Hz)')
-ylabel('DSP periodogram')
-grid on
-subplot(4,1,4)
-plot(fw,PSDw,'r')
-xlabel('Fréquence (Hz)')
-ylabel('DSP pwelch')
-grid on
 %}
-    function output= psd_estimations_on_a_signal(signal,Fs)
-    %{
-    z=x+y;
-    disp("the result is: ")
-    disp(z)
-    output=z;
-    %}
 
-    Ps = 1/Fs;%période d'échantillonnage
-    N = length(xc);%pour avoir le nombre d'échantillons du signal
-    
-    t = 0:Ps:(N-1)*Ps;%échelle de temps physique
-    
-    f = 0:(Fs/N):Fs/2;%échelle des fréquences en respectant la limite de Shannon Fs/2
-    
-    %Calcul du périodogramme (estimateur de la DSP) "de base et à la main" via la fonction fft
-    Xfft = fft(xc);%calcul de la transformée de Fourier rapide
-    PSD = (abs(Xfft).^2)/(N*Fs);%calcul du périodogramme à partir du module au carré de la fft
-    
-    %Calcul du périodogramme avec la fonction Matlab directement, pour
-    %comparaison
-    [PSDm,fm] = periodogram(xc,rectwin(N),f,Fs);%version two-sided (cf. help) qui correspond
-    % à la même échelle que la version précédente
-    
-    %Calcul du périodogramme de Welch avec un fenêtrage de Hamming, des tailles
-    %de fenêtres de 1000 points (1 seconde) et un overlap de 500 points
-    [PSDw,fw] = pwelch(xc,hamming(1000),500,N,Fs);
-    
-end
+
+
+
+
+
