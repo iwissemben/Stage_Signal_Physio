@@ -367,7 +367,6 @@ def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int,
 ##################### Plot temporal signal and its DSPs  ######################
 # =============================================================================
 
-
 def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
     """
     Computes the PSD of a signal using 3 different methods (via FFT, via Scipy's periodogram and welch functions).
@@ -417,105 +416,6 @@ def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
     PSD_w = {"frequencies": freq2, "psds": Pxx_density2}
     return time_signal, PSD_fft, PSD_p, PSD_w
 
-
-def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int, fig_title: str, external_results: str = None):
-    """
-    Plots a time signal alongside its 3 PSDs.
-
-    Calls compute_signal_time_dsps() and plots the results as figure of 4 subplots (lines).
-    If external_results provided the function will superimpose the external results to each corresponding PSD subplot and add an inset zoom to check differences.
-    
-    Returns 3 dictionaries (for each PSD estimation method) of two key-value pairs : 
-        (key1:"frequencies", value:(1D)array of frequencies) \n
-        (key2:"psds", value: (1D)array of PSD)
-
-    Parameters:
-        fig_number (int): Number of the figure.
-        signal (np.ndarray): 1D array of amplitudes.
-        sample_rate (int): sampling rate (in Hz).
-        fig_title (str): Title of the figure.
-        external_results (str): external psd results filename with extension.csv (cf function import_psd_results2()).
-            External results must be an array of 6 columns arranged by two, as 3*(frequenceies,psds), for each PSD calculation method.
-
-    Return:
-        PSD_fft (dict) : Dictionary containing signal's DSP results computed via FFT: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
-        PSD_p (dict) : Dictionary containing signal's DSP results computed via periodogram: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
-        PSD_w (dict) : Dictionary containing signal's DSP results computed via welch: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
-    """
-    # compute the PSDs of a signal using 3 different methods
-    time_signal, PSD_fft, PSD_p, PSD_w = compute_signal_time_dsps(
-        signal=signal, sample_rate=sample_rate)
-
-    # Show the time signal and the 3 different results of the PSD
-    figure, axis = plt.subplots(4, figsize=(
-        10, 7), layout="constrained", num=fig_number)
-    figure.suptitle(fig_title + " :\n Time-signal and DSPs")
-
-    # plot time signal
-    axis[0].plot(time_signal["time_vector"], time_signal["amplitudes"], "-k")
-    # axis[0].set_title('Time signal')
-    axis[0].set_ylabel("Amplitude(µV)")
-    axis[0].set_xlabel("time(s)")
-    axis[0].set_xlim(0)
-    axis[0].grid()
-
-    # plot signal's DSP via FFT
-    axis[1].plot(PSD_fft["frequencies"], PSD_fft["psds"], label="Python")
-    # axis[1].set_title('PSD from FFT')
-    axis[1].set_xlim(0)
-    axis[1].set_ylabel("PSD from \n FFT (µV²/Hz)")
-    axis[1].set_xlabel("Frequency (Hz)")
-    axis[1].grid()
-
-    # plot signal's DSP via periodogramm
-    axis[2].plot(PSD_p["frequencies"], PSD_p["psds"], label="_Python")
-    # axis[2].set_title('PSD from periodogramm (µV²/Hz)')
-    axis[2].set_xlim(0)
-    axis[2].set_ylabel("PSD from \n periodogramm \n (µV²/Hz)")
-    axis[2].set_xlabel("Frequency (Hz)")
-    axis[2].grid()
-
-    # plot signal's DSP via scipy.signal.welch
-    axis[3].plot(PSD_w["frequencies"], PSD_w["psds"], label="_Python")
-    # axis[3].set_title('DSP')
-    axis[3].set_xlim(0)
-    axis[3].set_ylabel("PSD signal.welch \n (µV²/Hz)")
-    axis[3].set_xlabel("Frequency (Hz)")
-    axis[3].grid()
-
-    # Superimpose to each PSD subplot other results (ex from matlab)
-    if external_results is not None:
-        """        PSD_fft_external = {
-            "frequencies": external_results[:, 0], "psds": external_results[:, 1]}
-        PSD_p_external = {
-            "frequencies": external_results[:, 2], "psds": external_results[:, 3]}
-        PSD_w_external = {
-            "frequencies": external_results[:, 4], "psds": external_results[:, 5]}
-        """
-        
-        PSD_fft_external,PSD_p_external,PSD_w_external=import_psd_results2(psd_results_file_name=external_results)
-
-        axis[1].plot(PSD_fft_external["frequencies"],
-                     PSD_fft_external["psds"], '--r', label="Matlab")
-        axis[2].plot(PSD_p_external["frequencies"],
-                     PSD_p_external["psds"], '--r', label="_Matlab")
-        axis[3].plot(PSD_w_external["frequencies"],
-                     PSD_w_external["psds"], '--r', label="_Matlab")
-
-        add_inset_zoom(ax=axis[1], x_data=(PSD_fft["frequencies"], PSD_fft_external["frequencies"]), y_data=(PSD_fft["psds"], PSD_fft_external["psds"]),
-                       zoom_region=(0, 20, 0, np.max(np.maximum(PSD_fft_external["psds"], PSD_fft["psds"]))))
-        add_inset_zoom(ax=axis[2], x_data=(PSD_p["frequencies"], PSD_p_external["frequencies"]), y_data=(PSD_p["psds"], PSD_p_external["psds"]),
-                       zoom_region=(0, 20, 0, 10))
-        add_inset_zoom(ax=axis[3], x_data=(PSD_p["frequencies"], PSD_w_external["frequencies"]), y_data=(PSD_w["psds"], PSD_w_external["psds"]),
-                       zoom_region=(0, 20, 0, 6))
-    else:
-        add_inset_zoom(ax=axis[1], x_data=PSD_fft["frequencies"], y_data=PSD_fft["psds"],
-                       zoom_region=(0, 50, 0, np.max(PSD_fft["psds"])))
-
-    figure.legend(title="Results source", loc="upper right")
-    return PSD_fft, PSD_p, PSD_w
-
-
 def add_inset_zoom(ax: plt.Axes, x_data, y_data: np.ndarray, zoom_region: tuple):
     """
     Add a child inset axes plot to the given Axes object. Can show multiple overlapping series.
@@ -557,6 +457,147 @@ def add_inset_zoom(ax: plt.Axes, x_data, y_data: np.ndarray, zoom_region: tuple)
                       labelleft=True, labelbottom=True)
     axins.grid(visible=True, linestyle='--', linewidth=0.5)
 
+def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int, fig_title: str, external_results: str = None):
+    """
+    Plots a single time signal alongside its 3 PSDs.
+
+    Calls compute_signal_time_dsps() and plots the results as figure of 4 subplots (lines).
+    If external_results specified, calls import_psd_results2() to superimpose the external results to each corresponding PSD subplot and add an inset zoom to check differences.
+    
+    Returns 2 dictionaries (psd_python_results, psd_matlab_results), each containing the PSD results (from fft,periodogram,welch) of the desired signal.
+        For both, results are stored under respective keys (key1,key2,key3)=("PSD_FFT","PSD_P","PSD_W")
+
+    Parameters:
+    ----------
+        fig_number (int): Number of the figure.
+        signal (np.ndarray): 1D array of amplitudes.
+        sample_rate (int): sampling rate (in Hz).
+        fig_title (str): Title of the figure.
+        external_results (str): external psd results filename with extension.csv (cf function import_psd_results2()).
+            External results must be an array of 6 columns arranged by two, as 3*(frequenceies,psds), for each PSD calculation method.
+
+    Return:
+    ----------
+        psd_results (dict) : Dictionary of two key:value pairs containing a signal's DSP results (FFT,periodogram,welch).
+            key1:"Python_PSD_results"; value1: Dictionary of results from 'compute_signal_time_dsps()' function
+            key2:"Matlab_PSD_results"; value1: Dictionary of results from 'import_psd_results2() function
+    """
+    # compute the PSDs of a signal using 3 different methods
+    time_signal, PSD_fft, PSD_p, PSD_w = compute_signal_time_dsps(
+        signal=signal, sample_rate=sample_rate)
+    psd_python_results={'PSD_FFT':PSD_fft,'PSD_P':PSD_p,'PSD_W':PSD_w}
+
+
+    # Show the time signal and the 3 different results of the PSD
+    figure, axis = plt.subplots(4, figsize=(
+        10, 7), layout="constrained", num=fig_number)
+    figure.suptitle(fig_title + " :\n Time-signal and DSPs")
+
+    # plot time signal
+    axis[0].plot(time_signal["time_vector"], time_signal["amplitudes"], "-k")
+    # axis[0].set_title('Time signal')
+    axis[0].set_ylabel("Amplitude(µV)")
+    axis[0].set_xlabel("time(s)")
+    axis[0].set_xlim(0)
+    axis[0].grid()
+
+    # plot signal's DSP via FFT
+    axis[1].plot(PSD_fft["frequencies"], PSD_fft["psds"], label="Python")
+    # axis[1].set_title('PSD from FFT')
+    axis[1].set_xlim(0)
+    axis[1].set_ylabel("PSD from \n FFT (µV²/Hz)")
+    axis[1].set_xlabel("Frequency (Hz)")
+    axis[1].grid()
+
+    # plot signal's DSP via periodogramm
+    axis[2].plot(PSD_p["frequencies"], PSD_p["psds"], label="_Python")
+    # axis[2].set_title('PSD from periodogramm (µV²/Hz)')
+    axis[2].set_xlim(0)
+    axis[2].set_ylabel("PSD from \n periodogramm \n (µV²/Hz)")
+    axis[2].set_xlabel("Frequency (Hz)")
+    axis[2].grid()
+
+    # plot signal's DSP via scipy.signal.welch
+    axis[3].plot(PSD_w["frequencies"], PSD_w["psds"], label="_Python")
+    # axis[3].set_title('DSP')
+    axis[3].set_xlim(0)
+    axis[3].set_ylabel("PSD signal.welch \n (µV²/Hz)")
+    axis[3].set_xlabel("Frequency (Hz)")
+    axis[3].grid()
+
+    # Superimpose to each PSD subplot other results (ex from matlab)
+    if external_results is not None:        
+        PSD_fft_external,PSD_p_external,PSD_w_external=import_psd_results2(psd_results_file_name=external_results)
+        psd_matlab_results={'PSD_FFT':PSD_fft_external,'PSD_P':PSD_p_external,'PSD_W':PSD_w_external}
+
+
+        axis[1].plot(PSD_fft_external["frequencies"],
+                     PSD_fft_external["psds"], '--r', label="Matlab")
+        axis[2].plot(PSD_p_external["frequencies"],
+                     PSD_p_external["psds"], '--r', label="_Matlab")
+        axis[3].plot(PSD_w_external["frequencies"],
+                     PSD_w_external["psds"], '--r', label="_Matlab")
+
+        add_inset_zoom(ax=axis[1], x_data=(PSD_fft["frequencies"], PSD_fft_external["frequencies"]), y_data=(PSD_fft["psds"], PSD_fft_external["psds"]),
+                       zoom_region=(0, 20, 0, np.max(np.maximum(PSD_fft_external["psds"], PSD_fft["psds"]))))
+        add_inset_zoom(ax=axis[2], x_data=(PSD_p["frequencies"], PSD_p_external["frequencies"]), y_data=(PSD_p["psds"], PSD_p_external["psds"]),
+                       zoom_region=(0, 20, 0, 10))
+        add_inset_zoom(ax=axis[3], x_data=(PSD_p["frequencies"], PSD_w_external["frequencies"]), y_data=(PSD_w["psds"], PSD_w_external["psds"]),
+                       zoom_region=(0, 20, 0, 6))
+        psd_results={'Python_PSD_results':psd_python_results,'Matlab_PSD_results':psd_matlab_results}
+
+    else:
+        add_inset_zoom(ax=axis[1], x_data=PSD_fft["frequencies"], y_data=PSD_fft["psds"],
+                       zoom_region=(0, 50, 0, np.max(PSD_fft["psds"])))
+        psd_results={'Python_PSD_results':psd_python_results}
+
+    figure.legend(title="Results source", loc="upper right")    
+    return psd_results
+
+def plot_multi_signal_time_dsps(multi_channel_signals: np.ndarray, sample_rate:float,
+                                channels_dict:dict, selected_channel_numbers:np.ndarray,input_signal_filename:str):    
+    """
+    Plots multiple time signals alongside their respective 3 PSDs.
+    Based on the plot_single_signal_time_dsps() which is repeated for each selected channel.
+        If multiple channels (n) are selected, plot_single_signal_time_dsps() is called n times.
+    Calls list_matlab_psd_results_filenames() to list external psd results filename of selected channels.
+    
+    Returns a dictionary containing for each electrodes the results of plot_single_signal_time_dsps() function
+
+    Parameters:
+    ----------
+        multi_channel_signals(np.ndarray): 2D array of amplitudes
+        sample_rate (int): sampling rate (in Hz)
+        channels_dict(dict): dictionary of channels names
+        selected_channel_numbers(np.ndarray): 1D array of channel numbers to study
+        input_signal_filename(str): name of the input file containing time-signals (used also to retrieve matlab results)
+
+    Return:
+    ----------
+        electordes_results_dict (dict) : Dictionary of n key:value pairs containing n signal's (python and matlab) DSP results (FFT,periodogram,welch).
+            keyi:"channel_name_i" ; valuei:psd_results
+            where psd_results(dict) is output of plot_single_signal_time_dsps().
+    """
+    selected_channel_indexes=selected_channel_numbers-1
+
+    #For each selected electrode, determine the filenames of the appropriate external (psd) results
+    MATLAB_PSD_results_filenames_list=list_matlab_psd_results_filenames(input_signal_filename=input_signal_filename,
+                                                                        channels_dict=channels_dict,
+                                                                        selected_channel_numbers=selected_channel_numbers)
+    electordes_results_dict={}
+    for iter,(channel_num,channel_index,matlab_results_filename) in enumerate(zip(selected_channel_numbers,selected_channel_indexes,MATLAB_PSD_results_filenames_list)):
+        channel_name=f"Channel_{str(channel_num)}_{channels_dict['Channel_'+str(channel_num)]}"
+        print("channel name:",channel_name)
+        figure_title=f"{input_signal_filename}\n {matlab_results_filename} \n {channel_name}"
+        print(figure_title)
+        channel_i_signal=multi_channel_signals[:,channel_index] #select correct signal
+        electrode_i_psd_results=plot_single_signal_time_dsps(fig_number=iter, signal=channel_i_signal,
+                                                             sample_rate=sample_rate, fig_title=figure_title,
+                                                             external_results=matlab_results_filename)
+        key=f"{channel_name}"
+        value=electrode_i_psd_results
+        electordes_results_dict[key] = value  # Ajoute la paire clé-valeur au dictionnaire
+    return electordes_results_dict
 
 # =============================================================================
 ############################ Generate test signal  ############################
@@ -909,6 +950,39 @@ def abs_distance(series1,series2):
     diff=series1-series2
     absolute_diff=abs(diff)
     return(absolute_diff)
+
+def list_matlab_psd_results_filenames(input_signal_filename:str,channels_dict:dict[str],selected_channel_numbers:list[int]):
+    """
+    Lists the expected csv filenames of the matlab psd results for the selected channels.
+
+    Parameters:
+    ----------
+        input_signal_filename (str): name of the input eeg data file (with its csv extension)
+        channels_dict (dict): Dictionary of channel numbers as keys (ie Channel_x ) and names as values (ie C3)
+        selected_channel_numbers (list): List of the selected channel numbers (integers)
+
+    Returns:
+    ----------
+        matlab_results_filename_list(list): dictionary of the frequencies and PSDs estimates from matlabs FFT
+        PSD_p_results (dict): dictionary of the frequencies and PSDs estimates from matlabs periodogram function
+        PSD_w_results (dict): dictionary of the frequencies and PSDs estimates from matlabs welch function
+    """
+    matlab_results_filename_list=[]
+    channel_indexes=selected_channel_numbers-1
+    print("selected channels :")
+    for (i,y) in zip(selected_channel_numbers,channel_indexes):
+        print(f"channel number:{i}, channel index:{y}")
+        channel_name=f"Channel_{str(i)}_{channels_dict['Channel_'+str(i)]}"
+        print(channel_name)
+
+        #get name of corresponding matlab psd result 
+        filenamei=f"MATLAB_PSD_res_EEG_{channel_name}_{input_signal_filename }"
+
+        matlab_results_filename_list.append(filenamei)
+
+    print(f"matlab psd results file names: {matlab_results_filename_list}")
+
+    return matlab_results_filename_list
 
 def import_psd_results2(psd_results_file_name:str):
     """
