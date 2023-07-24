@@ -1,6 +1,7 @@
 function [psd_fft,psd_p,psd_w]=estimate_signal_psds(signal,Fs)
     N = length(signal);%pour avoir le nombre d'échantillons du signal
     f = 0:(Fs/N):Fs/2;%échelle des fréquences en respectant la limite de Shannon Fs/2
+    disp(f)
     %Calcul du périodogramme (estimateur de la DSP) "de base et à la main" via la fonction fft
     Xfft = fft(signal);%calcul de la transformée de Fourier rapide
     PSD = (abs(Xfft).^2)/(N*Fs);%calcul du périodogramme à partir du module au carré de la fft

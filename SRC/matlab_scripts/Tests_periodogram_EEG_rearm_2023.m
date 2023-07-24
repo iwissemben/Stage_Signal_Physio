@@ -17,6 +17,7 @@ close
         %get sampling frequency from file name
         t=split(input_filepath,"_");
         Fs = round(str2double(t{end-1})); %sampling frequency (Hz)
+        disp(Fs);
     % 1.5- Define channel names
         channels_dict = ["Channel_1_C4","Channel_2_FC2","Channel_3_FC6","Channel_4_CP2","Channel_5_C3","Channel_6_FC1","Channel_7_FC5","Channel_8_CP1"];
 
@@ -42,7 +43,7 @@ for element=select_channel_number % loop over each number
     % 4.1 - Define export file name & path
         [~, input_filename, ~] = fileparts(input_filepath); %get input file name from filepath
         export_filename="MATLAB_PSD_res_EEG_"+channels_dict(element)+"_"+input_filename; %define output filename
-        export_filepath="../../DAT/OUTPUT/"+export_filename;
+        export_filepath="../../DAT/OUTPUT/Matlab_PSD_Results/"+export_filename;
     % 4.2 - Export PSD results to csv
         results=[PSD_fft,PSD_p,PSD_w];
         header=["f_fft","PSDfft","fm","PSDm","fw","PSDw"];

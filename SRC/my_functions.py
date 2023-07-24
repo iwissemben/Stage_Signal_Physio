@@ -70,9 +70,9 @@ def show_markers(plot_type, markers_times_array: np.ndarray):
 # =============================================================================
 
 
-def single_plot(filename: str, fig_number: int, x: np.ndarray, y: np.ndarray, fig_title: str,
+def single_plot(filename: str, x: np.ndarray, y: np.ndarray, fig_title: str,
                 xlabel: str, ylabel: str, markers_times_array: np.ndarray = None, point_style: str = "-k",
-                line_width: int | float = 1):
+                line_width: int | float = 1,fig_number: int=None):
     """
     Custom multipurpose function that displays a single graph
 
@@ -87,7 +87,8 @@ def single_plot(filename: str, fig_number: int, x: np.ndarray, y: np.ndarray, fi
     outputs: [None]
     """
     # Creation of the figure
-    plt.figure(fig_number)
+    if fig_number:
+        plt.figure(fig_number)
     plt.plot(x, y, point_style, lw=line_width)
     plt.title(str(fig_title+"\n"+filename))
     plt.xlabel(str(xlabel))
@@ -97,6 +98,7 @@ def single_plot(filename: str, fig_number: int, x: np.ndarray, y: np.ndarray, fi
     if markers_times_array is not None:
         show_markers(plt, markers_times_array)
     plt.legend()
+    plt.show()
 
 # =============================================================================
 ############################# Mosaic_plotter  #################################
@@ -366,16 +368,37 @@ def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int,
 # =============================================================================
 ##################### Plot temporal signal and its DSPs  ######################
 # =============================================================================
+def create_positive_frequency_vector(Fs:int, N:int):
+    """
+        Create positive frequency vector.
+        Parameters:
+        ----------
+        Fs (int): Sampling frequency of the signal (in Hz)
+        N (int): Length of the signal
+
+        Return:
+        -------
+        frequencies(np.ndarray): 1D array of frequencies ranging from 0 to the Nyquist frequency by Fs/2 step.
+    """
+    # Calculate the frequency resolution
+    freq_resolution = Fs / N
+
+    # Create the frequency vector from 0 Hz to Fs/2
+    frequencies = np.linspace(0, Fs/2, N//2 + 1)
+
+    return frequencies
 
 def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
     """
     Computes the PSD of a signal using 3 different methods (via FFT, via Scipy's periodogram and welch functions).
 
     Parameters:
+    ----------
         signal (np.ndarray): 1D array of amplitudes
         sample_rate (int): sampling rate of the signal
 
     Return:
+    -------
         time_signal (dict): Dictionary containing signal's timepoints and amplitudes as ndarray under key1 "time_vector" and key2 "amplitudes".
         PSD_fft (dict) : Dictionary containing signal's DSP results computed via FFT: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
         PSD_p (dict) : Dictionary containing signal's DSP results computed via periodogram: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
@@ -390,14 +413,21 @@ def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
 
     # compute FFT of the signal
     signal_fft = np.fft.fft(signal)
-    signal_frequency_vector = np.fft.fftfreq(len(signal), 1/sample_rate)
+    #signal_frequency_vector = np.fft.fftfreq(N, 1/sample_rate)
+    signal_frequency_vector=create_positive_frequency_vector(Fs=sample_rate,N=N)
+    freq_vector_len=len(signal_frequency_vector)
+
+    #signal_frequency_vector = np.arange(0,(sample_rate//2)+freq_res,freq_res)
+    print(f"signal_frequency_vector before crop len:{len(signal_frequency_vector)},half_val: {signal_frequency_vector[-(freq_vector_len//2)]}")
 
     # Only keep the positive frequencies and associated amplitudes
-    signal_frequency_vector = signal_frequency_vector[0:(
-        (len(signal_frequency_vector)//2)+1)]  # +1 due to python intervals
-
-    signal_fft = signal_fft[0:((len(signal_fft)//2)+1)]
-
+    """
+    signal_frequency_vector = signal_frequency_vector[:(
+        ((freq_vector_len//2 +1)))]  # +1 due to python intervals
+    """
+    print(f"signal_frequency_vector last freq : {signal_frequency_vector[-1]}")
+    signal_fft = signal_fft[:((N//2)+1)]
+    
     # compute PSD via FFT
     psd_from_fft = (np.abs(signal_fft)**2)/(N*sample_rate)
 
@@ -498,13 +528,13 @@ def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rat
     # axis[0].set_title('Time signal')
     axis[0].set_ylabel("Amplitude(µV)")
     axis[0].set_xlabel("time(s)")
-    axis[0].set_xlim(0)
+    #axis[0].set_xlim(0)
     axis[0].grid()
 
     # plot signal's DSP via FFT
     axis[1].plot(PSD_fft["frequencies"], PSD_fft["psds"], label="Python")
     # axis[1].set_title('PSD from FFT')
-    axis[1].set_xlim(0)
+    #axis[1].set_xlim(0)
     axis[1].set_ylabel("PSD from \n FFT (µV²/Hz)")
     axis[1].set_xlabel("Frequency (Hz)")
     axis[1].grid()
@@ -512,7 +542,7 @@ def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rat
     # plot signal's DSP via periodogramm
     axis[2].plot(PSD_p["frequencies"], PSD_p["psds"], label="_Python")
     # axis[2].set_title('PSD from periodogramm (µV²/Hz)')
-    axis[2].set_xlim(0)
+    #axis[2].set_xlim(0)
     axis[2].set_ylabel("PSD from \n periodogramm \n (µV²/Hz)")
     axis[2].set_xlabel("Frequency (Hz)")
     axis[2].grid()
@@ -520,7 +550,7 @@ def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rat
     # plot signal's DSP via scipy.signal.welch
     axis[3].plot(PSD_w["frequencies"], PSD_w["psds"], label="_Python")
     # axis[3].set_title('DSP')
-    axis[3].set_xlim(0)
+    #axis[3].set_xlim(0)
     axis[3].set_ylabel("PSD signal.welch \n (µV²/Hz)")
     axis[3].set_xlabel("Frequency (Hz)")
     axis[3].grid()
@@ -529,6 +559,7 @@ def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rat
     if external_results is not None:        
         PSD_fft_external,PSD_p_external,PSD_w_external=import_psd_results2(psd_results_file_name=external_results)
         psd_matlab_results={'PSD_FFT':PSD_fft_external,'PSD_P':PSD_p_external,'PSD_W':PSD_w_external}
+        print(f"len psd matlab fft:{len(psd_matlab_results['PSD_FFT']['frequencies'])}")
 
 
         axis[1].plot(PSD_fft_external["frequencies"],
@@ -539,16 +570,16 @@ def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rat
                      PSD_w_external["psds"], '--r', label="_Matlab")
 
         add_inset_zoom(ax=axis[1], x_data=(PSD_fft["frequencies"], PSD_fft_external["frequencies"]), y_data=(PSD_fft["psds"], PSD_fft_external["psds"]),
-                       zoom_region=(0, 20, 0, np.max(np.maximum(PSD_fft_external["psds"], PSD_fft["psds"]))))
+                       zoom_region=(0, 30, 0, np.max(np.maximum(PSD_fft_external["psds"], PSD_fft["psds"]))))
         add_inset_zoom(ax=axis[2], x_data=(PSD_p["frequencies"], PSD_p_external["frequencies"]), y_data=(PSD_p["psds"], PSD_p_external["psds"]),
-                       zoom_region=(0, 20, 0, 10))
+                       zoom_region=(0, 30, 0, 10))
         add_inset_zoom(ax=axis[3], x_data=(PSD_p["frequencies"], PSD_w_external["frequencies"]), y_data=(PSD_w["psds"], PSD_w_external["psds"]),
-                       zoom_region=(0, 20, 0, 6))
+                       zoom_region=(0, 30, 0, 6))
         psd_results={'Python_PSD_results':psd_python_results,'Matlab_PSD_results':psd_matlab_results}
 
     else:
         add_inset_zoom(ax=axis[1], x_data=PSD_fft["frequencies"], y_data=PSD_fft["psds"],
-                       zoom_region=(0, 50, 0, np.max(PSD_fft["psds"])))
+                       zoom_region=(0, 40, 0, np.max(PSD_fft["psds"])))
         psd_results={'Python_PSD_results':psd_python_results}
 
     figure.legend(title="Results source", loc="upper right")    

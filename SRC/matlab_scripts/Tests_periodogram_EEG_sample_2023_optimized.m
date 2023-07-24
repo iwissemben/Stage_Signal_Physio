@@ -2,10 +2,12 @@ clear
 close
 
 % 1 - load the file
-input_filepath='../../DAT/INPUT/EEG_1channel_1000Hz.txt';
+input_filepath='../../DAT/INPUT/EEG_1channel_1000_Hz.txt';
 x = load(input_filepath);%pour charger le signal expérimental
 xc = x-mean(x);%pour centrer le signal
-Fs = 1000;%fréquence d'échantillonnage
+t=split(input_filepath,"_");
+Fs = round(str2double(t{end-1})); %sampling frequency (Hz)
+disp(Fs);
 channel_number=0;
 
 % 2 - compute the PSD estimations on the signal
@@ -15,7 +17,7 @@ channel_number=0;
 % 3 - export the PSD estimations of the signal
 [~, input_filename, ~] = fileparts(input_filepath); %get input filename from filepath
 export_filename="MATLAB_PSD_res_EEG_chan_"+channel_number+"_"+input_filename; %define output filename
-export_filepath="../../DAT/OUTPUT/"+export_filename;
+export_filepath="../../DAT/OUTPUT/Matlab_PSD_Results/"+export_filename;
 
 results=[u,v,w];
 header=["f_fft","PSDfft","fm","PSDm","fw","PSDw"];
