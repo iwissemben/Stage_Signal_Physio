@@ -11,7 +11,7 @@ from my_filters import *
 
 
 # =============================================================================
-############################# Stream_Finder_by_name  ##########################
+############################### Manage Xdf files  #############################
 # =============================================================================
 
 
@@ -33,6 +33,43 @@ def stream_Finder_by_name(datalist, name):
             print(streamindex)
             # print(i["info"]["type"])
             return streamindex
+        
+def create_marker_times_labels_array(marker_time_stamps:np.ndarray=None,marker_labels:np.ndarray=None,xdf_input_filepath:str=None):
+    """
+    Create an array combining the markers labels and their timestamps.
+        If xdf file specified, timestamps are retrieved from the file and processed to start relative to recording start, not to unix epoch anymore.
+        If marker_time_stamps and marker_labels, the arrays are stacked and returned as defined.
+
+
+    Parameters
+    ----------
+        marker_time_stamps(np.ndarray): 1D array containing the marker timestamps.
+        marker_labels(np.ndarray): 1D array containing the markers labels.
+        xdf_input_filepath(str): Filepath of the EEG recordings as xdf file.
+        
+    Returns
+    -------
+        markers_times_labels(np.ndarray): 2D array containing the markers's timestamps alongside their labels.
+    """
+    all_args =[xdf_input_filepath,marker_time_stamps,marker_labels]
+    is_all_none = all(element is None for element in all_args)
+    
+    if is_all_none:
+        print("No arguments specified.")
+        markers_times_labels=None
+    elif xdf_input_filepath:
+        #Retrieve directly from xdf file markers timestamps relative to recording start and their labels
+        xdf_data, header = pyxdf.load_xdf(xdf_input_filepath, select_streams=[{'type': 'EEG'}, {
+                                    'type': 'Markers', 'name': 'MouseToNIC'}])
+        EEG_stream=xdf_data[0]
+        Mouse_markers_stream=xdf_data[1]
+        Mouse_markers_labels=Mouse_markers_stream["time_series"]
+        Mouse_markers_times=Mouse_markers_stream["time_stamps"]-EEG_stream["time_stamps"][0]
+        markers_times_labels=np.column_stack((Mouse_markers_times,Mouse_markers_labels))
+    else:
+        #stack given arrays to create the marker_times_labels array
+        markers_times_labels=np.column_stack((marker_time_stamps,marker_labels))
+    return markers_times_labels
 # =============================================================================
 ############################# show_markers  #####################################
 # =============================================================================
@@ -216,15 +253,23 @@ def filtfilt_cutoff_frequency_corrector(order: int, cutoff_freq: float | int, sa
 # =============================================================================
 
 
-def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.ndarray):
+def nearest_timestamps_array_finder2(EEG_times_stamps: np.ndarray, markers: np.ndarray):
     """
-    Function that finds the nearest timestamps in EEG signal to each marker
+    Finds the nearest timestamps to each marker in EEG signal timestamps array 
 
-    Useful when the marker timestamps may not be found in the EEG data due to Srate and time launch.
-    Computes the 
+        Application: 
+            Useful when the markers timestamps may not be found in the EEG data due to Srate and time launch.
+                ie: if the marker timestamps are foudn between two signal samples.
 
+    Parameters:
+    -----------
+        EEG_times_stamps(np.ndarray): 1D array of the signal timestamps
+        markers (np.ndarray): 2D array (markers_original_timestamps,marker_labels)
+    Returns:
+    -------
+        nearest_indices_timestamps(np.ndarray): 2D array  as [nearest_time_stamps_indices EEG,nearest_time_stamps]
     inputs: numpy.ndarray(1D),numpy.ndarray(1D)
-    outputs: numpy.ndarray(2D) as [nearest_time_stamps_indices EEG,nearest_time_stamps]
+
     """
     nearest_time_stamps = []
     nearest_time_stamps_indices = []
@@ -245,6 +290,63 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
         nearest_time_stamps_indices)
     nearest_indices_timestamps = np.column_stack(
         (nearest_time_stamps_indices, nearest_time_stamps))
+
+    return nearest_indices_timestamps
+
+def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.ndarray):
+    """
+    Finds the nearest timestamps to each marker in EEG signal timestamps array.
+
+    For each marker timestamp, the function looks for the nearest timestamp in EEG signal timestamps array
+    and its corresponding index.
+    
+    Application: 
+        Useful when the markers timestamps may not be found in the EEG data due to Srate and time launch.
+            ie: if the marker timestamps are foudn between two signal samples.
+
+    Parameters:
+    -----------
+        EEG_times_stamps (np.ndarray): 1D array of the signal timestamps
+        markers (np.ndarray): 2D array (markers_original_timestamps,marker_labels)
+
+    Returns:
+    -------
+        nearest_indices_timestamps (np.ndarray): 3D array as (markers_new_timestamps_indices, markers_new_timestamps, marker_labels)
+
+    """
+    nearest_time_stamps = []
+    nearest_time_stamps_indices = []
+    print("MARKERS LEN:", len(markers))
+
+    #iterate over the  marker timestamps
+    for y in markers[:, 0]:
+        original_time_stamp = y
+        # array of differences beween the eeg times and the original marker' timestamp
+        difference_array = np.absolute(
+            EEG_times_stamps-original_time_stamp)
+        # find the index of the minimal difference in the markers times stamps (nearest timestamp)
+        index = difference_array.argmin()
+        # append it to the liste of nearest timestamps
+        nearest_time_stamps.append(EEG_times_stamps[index])
+        nearest_time_stamps_indices.append(index)
+
+    #convert the list to array
+    nearest_time_stamps = np.array(nearest_time_stamps)
+    nearest_time_stamps_indices = np.array(
+        nearest_time_stamps_indices)
+    marker_labels=markers[:,1]
+
+    #stack arrays (nearest_index,nearest_timestamp,label)
+    """
+    nearest_indices_timestamps = np.column_stack(
+        (nearest_time_stamps_indices, nearest_time_stamps,marker_labels))
+    """
+    #store data in dictionary
+    nearest_indices_timestamps={
+        "markers_timestamp_indices":nearest_time_stamps_indices,
+        "markers_timestamps":nearest_time_stamps,
+        "marker_labels":marker_labels
+    }
 
     return nearest_indices_timestamps
 
@@ -700,35 +802,127 @@ def compute_average_ratio_for_event_on_blocks_for_all_electrodes(mat3d):
 # =============================================================================
 
 
-def get_segment_coordinates2(reference_index, segment_time_length, sample_rate):
+def get_segment_coordinates2(reference_index:int, segment_time_length, sample_rate):
     """
-    Gives the indices of a
+    Gets the coordinates of segments of specified time length on each side of a reference index.
 
-    Gives the coordinate of segments of specific time length around reference index.
-    segment_time_length: expressed in seconds
+    Returns 3 coordinates defining 2 segments:
+        (Lower end, reference_index) and (reference_index,higher_end)
 
-    retunrs coordinates (lower , reference , and higher coordinates)
+    Application: Allows to retieve the coordinates of the 2 segments surrounding a marker :
+        ie:1s before the marker and 1s after the marker.
+
+    Parameters:
+    -----
+        reference_index (int): sample index used as reference to define a segment
+        segment_time_length (int): expressed in seconds
+        sample_rate (int): Sample rate
+
+    Returns:
+    ------
+        segments_coordinates (dict): coordinates of the segments as indexes
+            key1:"reference_end"
+            key2:"lower_end"
+            key3: "higher_end"
     """
-    nperseg = segment_time_length*sample_rate  # number of points in the segment
-    reference_end = reference_index
+
+    # Length of the segment expressed in number of points
+    nperseg = segment_time_length*sample_rate  
+    
     lower_end = reference_index - nperseg
     higher_end = reference_index + nperseg
+    reference_end = reference_index
     # print("lower end: ", lower_end, ",reference: ",reference_end, "higher end: ", higher_end)
-    return {"reference_end": reference_end, "lower_end": lower_end, "higher_end": higher_end}
+
+    segments_coordinates={"reference_end": reference_end, "lower_end": lower_end, "higher_end": higher_end}
+    return segments_coordinates
 
 
-def get_signal_segement2(signal, lower_end: int, higher_end: int):
+def get_signal_segement2(signal:np.ndarray, lower_end: int, higher_end: int):
     """
-    Slice the signal between two indices and returns the segmented signal
+    Get a segment of a given signal.
+        The segment to extract is defined by its coordinates (lower_end,higher_end) expressed as the corresponding indexes of the signal array.
+            Note: array slicing already takes into account python [lower_end,higher_end+1]
+
+    Parameters:
+    ------
+        lower_end (int): index of the lower end of the segment
+        higher_end (int): index of the higher end of the segment
+
+    Retruns:
+    ------
+        signal_segment (np.ndarray): signal segment data
+        signal_length (int): length of original segment
     """
     signal_length = len(signal)
     signal_segment = signal[lower_end:(higher_end+1)]  # cf python slicing
+    segment_length=len(signal_segment)
     return signal_segment, signal_length
 
-
-def compute_welch_estimation_on_segment2(segment, sample_rate, nfft: None):
+def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times:np.ndarray,select_events:tuple,epoch_limits:tuple[float,float]):
     """
-    Compute PSD using welch method on segment
+    Extract epochs from a signal.
+
+    Parameters
+    ---------
+        signal (np.array): 1D array of samples
+        srate (float): sampling rate of the signal
+        marker_labels_times (np.array): 2D array of marker information as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        select_events (tuple): tuple of selected event types ex (111,100)
+        epoch_limits (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). (from 1 sec before to 2 sec after the time-locking event)
+
+    Returns
+    --------
+        epoched_signals (dict): Dictionary of epoched signals for each marker type
+            Keys (str): "label_markertype"
+            values (np.ndarray): 2D array of signal data epochs arranged as a column per event
+    """
+    #convert the marker dictionary to a 2D array
+    print(f"event structure type: {type(markers_labels_times)}")
+    array_markers_labels_times=np.column_stack(markers_labels_times.values())
+    
+    #convert the epoch limits in number of points
+    n_points_before=epoch_limits[0]*sample_rate
+    n_points_after=epoch_limits[1]*sample_rate
+    print(f"n_points_before_marker:{n_points_before} - n_points_after_marker:{n_points_after}")
+
+    epoched_signals={}
+    for event in select_events:
+        signal_segments=[]
+        for row in array_markers_labels_times:
+            if row[2]==event:
+                marker_index=row[0]
+                #calculate the coordinate of the segments
+                first_seg_coord=int(marker_index-n_points_before)
+                second_seg_coord=int(marker_index+n_points_after)
+                print(f"first_seg_coord: {first_seg_coord} - second_seg_coord: {second_seg_coord}")
+                #extract the segments and list them
+                signal_segment,_ = get_signal_segement2(signal=signal, lower_end=first_seg_coord, higher_end=second_seg_coord)
+                signal_segments.append(signal_segment)
+        #stack segments as columns in a 2D array
+        signal_segments=np.column_stack(signal_segments)
+        print(f"signal_segments shape: {signal_segments.shape}")
+
+        #store the stacked segments under key value corresponding to event label
+        key=f"label_{event}"
+        epoched_signals[key]=signal_segments
+    return epoched_signals
+
+def compute_welch_estimation_on_segment2(segment:np.ndarray, sample_rate:float, nfft: int= None):
+    """
+    Compute PSD using welch method on a segment.
+        Relies on the scipy.welch function.
+    
+    Parameters:
+    ------
+        segment (np.ndarray): samples of signal. 
+        sample_rate (float) : sampling rate
+        nfft (int): Length of the FFT used, for zero padding welch.
+
+    Retruns:
+    ------
+        freqs (np.ndarray): array of welch frequencies.
+        Pxx_density (np.ndarray): array of welch power densities.
     """
 
     segment_length = len(segment)  # number of points in the segment
@@ -737,18 +931,69 @@ def compute_welch_estimation_on_segment2(segment, sample_rate, nfft: None):
     freqs, Pxx_density = welch(segment, fs=sample_rate,
                                window="hann",
                                nperseg=sub_segment_length,detrend=False,
-                               noverlap=sub_segment_length//2,nfft=None,axis=0)
+                               noverlap=sub_segment_length//2,nfft=nfft,axis=0)
     return freqs, Pxx_density
 
-
-def compute_welch_on_a_signal_before_each_marker(signal, sample_rate, marker_times, segment_duration):
+def compute_averaged_psds_over_trials(trials:np.ndarray,sample_rate:float,nfft:int=None):
     """
-    marker_times is an array in which the first column must correspond to the indices of the markers timestamps in the signal time vector
+    Computes the the PSD of several sample trials and averages their results.
+
+    Parameters
+    ----------
+        trials (np.ndarray): 2D array of trials where each column represents the signal of a trial
+        sample_rate (float): Sampling rate of the signal
+        nfft (int): Length of the FFT used, for zero padding welch
+ 
+    Returns
+    ----------
+        mean_frequencies (np.ndarray): 1D array of PSD estimation frequency results
+        mean_pxx_densities (np.ndarray): 1D array of averaged PSD estimation power results
+    """
+    print(f"segment shapes - {trials.shape}")
+    frequencies=[]
+    Pxx_densities=[]
+    #compute the PSD estimation for each trial
+    for trial in trials.T:
+        freqs, Pxx_density=compute_welch_estimation_on_segment2(segment=trial, sample_rate=sample_rate,nfft=nfft)
+        frequencies.append(freqs)
+        Pxx_densities.append(Pxx_density)
+
+    Pxx_densities=np.column_stack(Pxx_densities)
+    frequencies=np.column_stack(frequencies)
+    #average the PSDs
+    mean_frequencies=np.mean(frequencies,axis=1) #equals every frequency column of the frequencies array anyway
+    mean_pxx_densities=np.mean(Pxx_densities,axis=1)
+    return mean_frequencies,mean_pxx_densities
+
+def compute_welch_on_a_signal_before_each_marker(signal:np.ndarray, sample_rate:float, markers_array:np.ndarray, segment_duration:float):
+    """
+    Computes the DSP estimations of all segments of a signal.
+
+    The signal has as many segments as it has of markers. Each segment streches over the specified segment duration and ends at a marker.
+    The DSPs are then computed BEFORE each marker
+    
+    Note: 
+        Uses the markers_array indexes to define the segments.
+
+    For opposite operation, see the complementary function 'compute_welch_on_a_signal_after_each_marker()'.
+
+
+    Parameters:
+    ------
+        signal (np.ndarray): 1D array of signal samples.
+        sample_rate (float) : Signal sampling rate.
+        markers_array (dict): Dictionary of 2D arrays under 3 keys as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        segment_duration (float): length of the segment on which to compute the DSP estimation.
+        
+    Retruns:
+    ------
+        freqs (np.ndarray): array of welch frequencies.
+        Pxx_density (np.ndarray): array of welch power densities.
     """
     N = len(signal)
     freqs_for_all_markers = []
     PSDs_for_all_markers = []
-    for marker in marker_times[:, 0]:
+    for marker in markers_array["markers_timestamp_indices"]:
 
         segment_coordinates = get_segment_coordinates2(
             reference_index=marker, segment_time_length=segment_duration, sample_rate=sample_rate)
@@ -759,7 +1004,7 @@ def compute_welch_on_a_signal_before_each_marker(signal, sample_rate, marker_tim
         signal_segment, full_signal_length = get_signal_segement2(
             signal=signal, lower_end=lower_end, higher_end=higher_end)
         freqs, Pxx_density = compute_welch_estimation_on_segment2(
-            signal_segment, sample_rate=sample_rate, nfft=N)
+            signal_segment, sample_rate=sample_rate, nfft=None)
         freqs_for_all_markers.append(freqs)
         PSDs_for_all_markers.append(Pxx_density)
 
@@ -769,14 +1014,35 @@ def compute_welch_on_a_signal_before_each_marker(signal, sample_rate, marker_tim
     return {"PSD_frequencies": freqs_for_all_markers, "PSD_magnitudes": PSDs_for_all_markers}
 
 
-def compute_welch_on_a_signal_after_each_marker(signal, sample_rate, marker_times, segment_duration):
+def compute_welch_on_a_signal_after_each_marker(signal:np.ndarray, sample_rate:float, markers_array:np.ndarray, segment_duration:float):
     """
-    marker_times is an array in which the first column must correspond to the indices of the markers timestamps in the signal time vector
+    Computes the DSP estimations of all segments of a signal.
+
+    The signal has as many segments as it has of markers. Each segment starts at a marker and streches over the specified segment duration.
+    The DSPs are then computed AFTER each marker
+    
+    Note: 
+        Uses the markers_array indexes to define the segments.
+
+    For opposite operation, see the complementary function 'compute_welch_on_a_signal_before_each_marker()'.
+
+    Parameters:
+    ------
+        signal (np.ndarray): 1D array of signal samples.
+        sample_rate (float) : Signal sampling rate.
+        markers_array (dict): Dictionary of 2D arrays under 3 keys as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        segment_duration (float): length of the segment on which to compute the DSP estimation.
+        
+    Retruns:
+    ------
+        freqs (np.ndarray): array of welch frequencies.
+        Pxx_density (np.ndarray): array of welch power densities.
     """
+
     N = len(signal)
     freqs_for_all_markers = []
     PSDs_for_all_markers = []
-    for marker in marker_times[:, 0]:
+    for marker in markers_array["markers_timestamp_indices"]:
 
         segment_coordinates = get_segment_coordinates2(
             reference_index=marker, segment_time_length=segment_duration, sample_rate=sample_rate)
@@ -787,7 +1053,7 @@ def compute_welch_on_a_signal_after_each_marker(signal, sample_rate, marker_time
         signal_segment, full_signal_length = get_signal_segement2(
             signal=signal, lower_end=reference_end, higher_end=higher_end)
         freqs, Pxx_density = compute_welch_estimation_on_segment2(
-            signal_segment, sample_rate=sample_rate, nfft=N)
+            signal_segment, sample_rate=sample_rate, nfft=None)
         freqs_for_all_markers.append(freqs)
         PSDs_for_all_markers.append(Pxx_density)
 
