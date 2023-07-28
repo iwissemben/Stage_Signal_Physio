@@ -295,7 +295,7 @@ def nearest_timestamps_array_finder2(EEG_times_stamps: np.ndarray, markers: np.n
 
 def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.ndarray):
     """
-    Finds the nearest timestamps to each marker in EEG signal timestamps array.
+    Finds the nearest marker timestamps corresponding to a sample in EEG signal timestamps array.
 
     For each marker timestamp, the function looks for the nearest timestamp in EEG signal timestamps array
     and its corresponding index.
@@ -311,8 +311,10 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
 
     Returns:
     -------
-        nearest_indices_timestamps (np.ndarray): 3D array as (markers_new_timestamps_indices, markers_new_timestamps, marker_labels)
-
+        nearest_indices_timestamps (dict): Dictionary of 3 key-value pairs, each value being a 1D array
+            "markers_timestamps" :  1D array of the timestamps associated to each marker.\n
+            "markers_timestamp_indices" : 1D array of the index values of the associated timestamps in the signal time array.\n
+            "marker_labels" : 1D array of the marker labels.\n
     """
     nearest_time_stamps = []
     nearest_time_stamps_indices = []
@@ -869,7 +871,9 @@ def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times
         srate (float): sampling rate of the signal
         marker_labels_times (np.array): 2D array of marker information as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
         select_events (tuple): tuple of selected event types ex (111,100)
-        epoch_limits (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). (from 1 sec before to 2 sec after the time-locking event)
+        epoch_limits (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
+            ex1: (0,4) - From 0 sec before to 4 sec after the time-locking event.
+            ex2: (1,2) - From 1 sec before to 2 sec after the time-locking event.
 
     Returns
     --------
@@ -879,7 +883,12 @@ def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times
     """
     #convert the marker dictionary to a 2D array
     print(f"event structure type: {type(markers_labels_times)}")
-    array_markers_labels_times=np.column_stack(markers_labels_times.values())
+    array_markers_labels_times=np.column_stack(list(markers_labels_times.values()))
+    
+    #create time vector
+    signal_times=np.arange(0,len(signal))*(1/sample_rate)
+    print(signal_times[1])
+    print(signal_times.shape)
     
     #convert the epoch limits in number of points
     n_points_before=epoch_limits[0]*sample_rate
@@ -888,7 +897,8 @@ def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times
 
     epoched_signals={}
     for event in select_events:
-        signal_segments=[]
+        signal_segments = []
+        time_segments = []
         for row in array_markers_labels_times:
             if row[2]==event:
                 marker_index=row[0]
@@ -898,14 +908,17 @@ def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times
                 print(f"first_seg_coord: {first_seg_coord} - second_seg_coord: {second_seg_coord}")
                 #extract the segments and list them
                 signal_segment,_ = get_signal_segement2(signal=signal, lower_end=first_seg_coord, higher_end=second_seg_coord)
+                time_segment=signal_times[first_seg_coord:second_seg_coord+1]
                 signal_segments.append(signal_segment)
+                time_segments.append(time_segment)
         #stack segments as columns in a 2D array
         signal_segments=np.column_stack(signal_segments)
+        time_segments=np.column_stack(time_segments)
         print(f"signal_segments shape: {signal_segments.shape}")
-
+        print(f"time_segments shape: {time_segments.shape}")
         #store the stacked segments under key value corresponding to event label
         key=f"label_{event}"
-        epoched_signals[key]=signal_segments
+        epoched_signals[key]={"signal_segments":signal_segments,"time_segments":time_segments}
     return epoched_signals
 
 def compute_welch_estimation_on_segment2(segment:np.ndarray, sample_rate:float, nfft: int= None):
@@ -925,7 +938,8 @@ def compute_welch_estimation_on_segment2(segment:np.ndarray, sample_rate:float, 
         Pxx_density (np.ndarray): array of welch power densities.
     """
 
-    segment_length = len(segment)  # number of points in the segment
+    segment_length = segment.shape[0] # number of points in the segment
+    print(segment_length)
     sub_segment_length=segment_length/4
     # split the segment in two sub segments with overlap of 50%
     freqs, Pxx_density = welch(segment, fs=sample_rate,
@@ -933,6 +947,37 @@ def compute_welch_estimation_on_segment2(segment:np.ndarray, sample_rate:float, 
                                nperseg=sub_segment_length,detrend=False,
                                noverlap=sub_segment_length//2,nfft=nfft,axis=0)
     return freqs, Pxx_density
+
+def compute_psds_for_each_epoch(epochs:np.ndarray,sample_rate:float,nfft:int=None):
+    """
+    Computes the the PSD of several epochs.
+
+    Parameters
+    ----------
+        epochs (np.ndarray): 2D array of signals, each column represents a signal
+        sample_rate (float): Sampling rate of the signals
+        nfft (int): Length of the FFT used, for zero padding welch
+ 
+    Returns
+    ----------
+        psd_results_all_epochs (dict): Dictionary of PSD estimation results:
+            "PSD_frequencies": 2D array of frequency results, each column corresponds to a signal\n
+            "PSD_magnitudes" : 2D array of PSD magnitudes results, each column corresponds to a signal\n
+    """
+    print(f"segment shapes - {epochs.shape}")
+    frequencies=[]
+    Pxx_densities=[]
+    #compute the PSD estimation for each trial
+    for epoch in epochs.T:
+        freqs, Pxx_density=compute_welch_estimation_on_segment2(segment=epoch, sample_rate=sample_rate,nfft=nfft)
+        frequencies.append(freqs)
+        Pxx_densities.append(Pxx_density)
+
+    Pxx_densities=np.column_stack(Pxx_densities)
+    frequencies=np.column_stack(frequencies)
+    psd_results_all_epochs={"PSD_frequencies" : frequencies,"PSD_magnitudes" : Pxx_densities}
+
+    return psd_results_all_epochs
 
 def compute_averaged_psds_over_trials(trials:np.ndarray,sample_rate:float,nfft:int=None):
     """
@@ -949,21 +994,55 @@ def compute_averaged_psds_over_trials(trials:np.ndarray,sample_rate:float,nfft:i
         mean_frequencies (np.ndarray): 1D array of PSD estimation frequency results
         mean_pxx_densities (np.ndarray): 1D array of averaged PSD estimation power results
     """
-    print(f"segment shapes - {trials.shape}")
-    frequencies=[]
-    Pxx_densities=[]
-    #compute the PSD estimation for each trial
-    for trial in trials.T:
-        freqs, Pxx_density=compute_welch_estimation_on_segment2(segment=trial, sample_rate=sample_rate,nfft=nfft)
-        frequencies.append(freqs)
-        Pxx_densities.append(Pxx_density)
-
-    Pxx_densities=np.column_stack(Pxx_densities)
-    frequencies=np.column_stack(frequencies)
+    psd_results_all_epochs=compute_psds_for_each_epoch(epochs=trials,sample_rate=sample_rate,nfft=nfft)
+    
     #average the PSDs
-    mean_frequencies=np.mean(frequencies,axis=1) #equals every frequency column of the frequencies array anyway
-    mean_pxx_densities=np.mean(Pxx_densities,axis=1)
+    mean_frequencies=np.mean(psd_results_all_epochs["PSD_frequencies"],axis=1) #equals every frequency column of the frequencies array anyway
+    mean_pxx_densities=np.mean(psd_results_all_epochs["PSD_magnitudes"],axis=1)
+    
     return mean_frequencies,mean_pxx_densities
+
+
+def signal_comparison(signal_1:np.ndarray,signal_2:np.ndarray,sample_rate:float,labels:tuple[str,str]):
+    """
+    Displays two time signals and their respective PSD estimation using welch method.
+        To compute the PSD estimates, 'compute_psds_for_each_epoch()' is called.
+
+    Parameters:
+    ----------
+        signal_1 (np.ndarray): 2D array with col_1:times,col_2=samples\n
+        signal_2 (np.ndarray): 2D array with col_1:times,col_2=samples\n
+        sample_rate (float): signals sampling rate\n
+        labels (tuple): length 2 tuple of signals labels (label_signal_1,label_signal_2)\n
+    Returns:
+    ----------
+    nothing
+    """
+    signals_to_compare=np.column_stack((signal_1[:,1],signal_2[:,1]))
+    print(f"tototot - {signals_to_compare.shape}")
+    N=len(signals_to_compare)
+    signals_psds=compute_psds_for_each_epoch(epochs=signals_to_compare,sample_rate=sample_rate,nfft=N)
+
+    figure, axis = plt.subplots(3,1,figsize=(15, 7),layout="constrained")
+    figure.suptitle("Signal comparison")
+
+    axis[0].set_title(f"Time signal 1: {labels[0]}")
+    axis[0].set_ylabel("Amplitudes (µV)")
+    axis[0].plot(signal_1[:,0],signal_1[:,1],color="blue")
+
+    axis[1].set_title(f"Time signal 2: {labels[1]}")
+    axis[1].set_xlabel("Time (s)")
+    axis[1].set_ylabel("Amplitudes (µV)")
+    axis[1].plot(signal_2[:,0],signal_2[:,1],color="red")
+
+    axis[2].set_title("Epochs PSDs")
+    axis[2].set_xlabel("Frequencies (Hz)")
+    axis[2].set_ylabel("Power (µV²/Hz)")
+    axis[2].plot(signals_psds["PSD_frequencies"][:,0],signals_psds["PSD_magnitudes"][:,0],label=f'{labels[0]}', color='blue')
+    axis[2].plot(signals_psds["PSD_frequencies"][:,1],signals_psds["PSD_magnitudes"][:,1],label=f'{labels[1]}', color='red')
+    axis[2].set_xlim(0,60)
+    axis[2].legend()
+    plt.show()
 
 def compute_welch_on_a_signal_before_each_marker(signal:np.ndarray, sample_rate:float, markers_array:np.ndarray, segment_duration:float):
     """
@@ -1004,7 +1083,7 @@ def compute_welch_on_a_signal_before_each_marker(signal:np.ndarray, sample_rate:
         signal_segment, full_signal_length = get_signal_segement2(
             signal=signal, lower_end=lower_end, higher_end=higher_end)
         freqs, Pxx_density = compute_welch_estimation_on_segment2(
-            signal_segment, sample_rate=sample_rate, nfft=None)
+            signal_segment, sample_rate=sample_rate, nfft=N)
         freqs_for_all_markers.append(freqs)
         PSDs_for_all_markers.append(Pxx_density)
 
@@ -1053,7 +1132,7 @@ def compute_welch_on_a_signal_after_each_marker(signal:np.ndarray, sample_rate:f
         signal_segment, full_signal_length = get_signal_segement2(
             signal=signal, lower_end=reference_end, higher_end=higher_end)
         freqs, Pxx_density = compute_welch_estimation_on_segment2(
-            signal_segment, sample_rate=sample_rate, nfft=None)
+            signal_segment, sample_rate=sample_rate, nfft=N)
         freqs_for_all_markers.append(freqs)
         PSDs_for_all_markers.append(Pxx_density)
 
