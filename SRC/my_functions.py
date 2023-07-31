@@ -869,7 +869,7 @@ def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times
     ---------
         signal (np.array): 1D array of samples
         srate (float): sampling rate of the signal
-        marker_labels_times (np.array): 2D array of marker information as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        marker_labels_times (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
         select_events (tuple): tuple of selected event types ex (111,100)
         epoch_limits (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
             ex1: (0,4) - From 0 sec before to 4 sec after the time-locking event.
@@ -881,22 +881,23 @@ def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times
             Keys (str): "label_markertype"
             values (np.ndarray): 2D array of signal data epochs arranged as a column per event
     """
-    #convert the marker dictionary to a 2D array
-    print(f"event structure type: {type(markers_labels_times)}")
+    #convert the marker_labels_times dictionary to a 2D array
     array_markers_labels_times=np.column_stack(list(markers_labels_times.values()))
     
-    #create time vector
+    #create the time vector of the entire signal
     signal_times=np.arange(0,len(signal))*(1/sample_rate)
-    print(signal_times[1])
-    print(signal_times.shape)
+
     
     #convert the epoch limits in number of points
     n_points_before=epoch_limits[0]*sample_rate
     n_points_after=epoch_limits[1]*sample_rate
-    print(f"n_points_before_marker:{n_points_before} - n_points_after_marker:{n_points_after}")
 
+    print(f"Epoch limits relative to events (in sec): before: {epoch_limits[0]}s - after: {epoch_limits[1]}s")
+    print(f"Epoch limits relative to events (in samples): n_points_before_marker: {n_points_before} - n_points_after_marker: {n_points_after}")
+    
     epoched_signals={}
     for event in select_events:
+        print(f"Event type : {event} ------------ epochs :")
         signal_segments = []
         time_segments = []
         for row in array_markers_labels_times:
@@ -924,8 +925,9 @@ def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times
 def compute_welch_estimation_on_segment2(segment:np.ndarray, sample_rate:float, nfft: int= None):
     """
     Compute PSD using welch method on a segment.
-        Relies on the scipy.welch function.
-    
+        Relies on the scipy.welch function, which is parametered to divide the given signal into 4 segments, and use an overlap of 50%
+        For given signal of length N (samples), the frequency resolution will be Fr=Sample_rate/(N/4). For Fr=Fe/N, argument nfft=N must be specified .
+
     Parameters:
     ------
         segment (np.ndarray): samples of signal. 
@@ -939,7 +941,6 @@ def compute_welch_estimation_on_segment2(segment:np.ndarray, sample_rate:float, 
     """
 
     segment_length = segment.shape[0] # number of points in the segment
-    print(segment_length)
     sub_segment_length=segment_length/4
     # split the segment in two sub segments with overlap of 50%
     freqs, Pxx_density = welch(segment, fs=sample_rate,
@@ -964,7 +965,7 @@ def compute_psds_for_each_epoch(epochs:np.ndarray,sample_rate:float,nfft:int=Non
             "PSD_frequencies": 2D array of frequency results, each column corresponds to a signal\n
             "PSD_magnitudes" : 2D array of PSD magnitudes results, each column corresponds to a signal\n
     """
-    print(f"segment shapes - {epochs.shape}")
+    print(f"segments shapes to psd - {epochs.shape}")
     frequencies=[]
     Pxx_densities=[]
     #compute the PSD estimation for each trial
@@ -1019,7 +1020,7 @@ def signal_comparison(signal_1:np.ndarray,signal_2:np.ndarray,sample_rate:float,
     nothing
     """
     signals_to_compare=np.column_stack((signal_1[:,1],signal_2[:,1]))
-    print(f"tototot - {signals_to_compare.shape}")
+    print(f"signals to compare shape - {signals_to_compare.shape}")
     N=len(signals_to_compare)
     signals_psds=compute_psds_for_each_epoch(epochs=signals_to_compare,sample_rate=sample_rate,nfft=N)
 
@@ -1469,12 +1470,12 @@ def export_xdf_eeg_to_csv(xdf_filepath:str,PROCESS_SIGNAL:bool=False):
     print("PROCESS_SIGNAL ? --",PROCESS_SIGNAL)
 
     if PROCESS_SIGNAL is False:
-            print("Keeping raw signals...")
+            print("--Keeping raw signals...")
             EEG_for_export=EEG_raw_amplitudes
             DATA_STATUS="raw"
 
     elif PROCESS_SIGNAL is True:
-        print("Processing signals")
+        print("--Processing signals")
         print("Detrending...")
         EEG_amplitudes_centered=detrend_signals(EEG_raw_amplitudes)
         print("Rereferencing...")
@@ -1494,6 +1495,7 @@ def export_xdf_eeg_to_csv(xdf_filepath:str,PROCESS_SIGNAL:bool=False):
     amplitudes_times=np.column_stack((EEG_for_export,EEG_times))
 
     #### Export to CSV file
+    print(f"--Exporting")
 
     # Create header for CSV
     header = ', '.join([f"{key}:{value}" for key, value in channels_dict.items()])
