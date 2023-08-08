@@ -34,6 +34,117 @@ def stream_Finder_by_name(datalist, name):
             # print(i["info"]["type"])
             return streamindex
         
+def list_stream_names(stream_list:list):
+    """
+    Lists the name of the streams founded by pyxdf's multistream importer.
+
+    Parameters:
+    ----------
+        - stream_list (list): List of streams founded.
+
+    Returns:
+    --------
+        - stream_names (list): list of names of the founded streams
+    """
+    stream_names=[]
+
+    for stream in stream_list:
+        stream_name=stream["info"]["name"][0]
+        stream_names.append(stream_name)
+    
+    return stream_names
+
+def retrieve_stream_data_from_xdf(xdf_input_filepath:str,stream_type:str,stream_name:str=None):
+    """
+    Retrieves data and recording setup information from a selected stream of an xdf file and return them tidied for ReArm needs.
+
+    Returns the data as a nested dictionary.
+    
+    Note: Currently handeled stream types: "EEG", "Mocap", "Markers".
+
+    Parameters:
+    -----------
+        - xdf_input_filepath (str): Filepath towards xdf file to analyze
+        - stream_type (str) : Type of the stream to look for
+        - stream_name (str): (optional) Name of the stream if multiple are found.
+
+    Returns:
+    -----------
+        - stream_result_data (dict): 
+            - "data" (dict): 
+                - "time_series" : stream_data_samples (np.ndarray) - 2D array of raw samples (each column contains data from a channel)
+                - "timestamps": stream_data_timestamps (np.ndarray) - 1D array of raw timestamps (associated to each sample)
+            - "infos" (dict):
+                - "sample_rate" (dict):
+                    - "nominal_srate" : nominal_srate (float) - nominal sampling rate of the recording
+                    - "effective_srate" : effective_srate (float) - effective sampling rate of the recording 
+                - "channels" (dict):
+                    - "names" : channel_names (list) - list of channel names
+                    - "units" : channel_units (list) - list of channel data units
+    
+                - "recording_time_limits" (dict): 
+                    - "recording_start" : recording_start (float) - first_timestamp (units?)
+                    - "recording_end" : recording_end (float) - last_timestamp (units?)
+
+    """
+    
+    if stream_name is not None:
+        stream_list, fileheader = pyxdf.load_xdf(xdf_input_filepath, select_streams=[{'type': stream_type,'name': stream_name}])
+    else :
+        stream_list, fileheader = pyxdf.load_xdf(xdf_input_filepath, select_streams=[{'type': stream_type}])
+
+    if len(stream_list) > 1:
+        stream_names = list_stream_names(stream_list)
+        raise Exception(f"More than one stream nammed '{stream_type}' was found. Stream names : {stream_names} \n Try specifying the stream name when calling the function. ")
+
+    else:
+        stream_data = stream_list[0]
+        #print(EEG_data)
+
+    #get stream data
+    stream_data_timestamps = stream_data["time_stamps"]
+    stream_data_samples = stream_data["time_series"]
+
+    #get channel names and units
+    channel_names = []
+    channel_units = []
+    if stream_type == "EEG":
+        for i in range(stream_data_samples.shape[-1]):
+            channel_i_name = stream_data["info"]["desc"][0]["channel"][i]["name"][0]
+            channel_i_unit = stream_data["info"]["desc"][0]["channel"][i]["unit"][0]
+            channel_names.append(channel_i_name)
+            channel_units.append(channel_i_unit)
+    elif stream_type == "MoCap":
+        for i in range(stream_data_samples.shape[-1]):
+            channel_i_name = stream_data["info"]["desc"][0]["channels"][0]["channel"][i]["label"][0]
+            channel_i_unit = stream_data["info"]["desc"][0]["channels"][0]["channel"][i]["unit"][0]
+            channel_names.append(channel_i_name)
+            channel_units.append(channel_i_unit)
+    elif stream_type == "Markers":
+            channel_names.append("Maker_labels")
+            channel_units.append(None)
+    else:
+        raise Exception(f"stream type {stream_type} not handeled yet")
+
+
+    #get sample rates
+    nominal_srate = float(stream_data["info"]["nominal_srate"][0])
+    effective_srate = float(stream_data["info"]["effective_srate"])
+
+    #get recording landmarks
+    recording_start = float(stream_data["footer"]["info"]["first_timestamp"][0])
+    recording_end = float(stream_data["footer"]["info"]["last_timestamp"][0])
+
+    #store data in dictionaries
+    data_dict = {"time_series":stream_data_samples,"timestamps":stream_data_timestamps}
+
+    info_dict = {"sample_rate":{ "nominal":nominal_srate,"effective":effective_srate},
+                 "recording_time_limits":{"start":recording_start,"end":recording_end},
+                 "channels":{"names":channel_names,"units":channel_units}}
+
+    stream_result_data={"data":data_dict,"infos":info_dict}
+    return stream_result_data
+        
 def create_marker_times_labels_array(marker_time_stamps:np.ndarray=None,marker_labels:np.ndarray=None,xdf_input_filepath:str=None):
     """
     Create an array combining the markers labels and their timestamps.
@@ -70,6 +181,40 @@ def create_marker_times_labels_array(marker_time_stamps:np.ndarray=None,marker_l
         #stack given arrays to create the marker_times_labels array
         markers_times_labels=np.column_stack((marker_time_stamps,marker_labels))
     return markers_times_labels
+
+def create_marker_times_labels_array2(marker_time_stamps:np.ndarray=None,marker_labels:np.ndarray=None,xdf_input_filepath:str=None):
+    """
+    Create an array combining the markers labels and their timestamps.
+        If xdf file specified, timestamps are retrieved from the file (mouse marker stream).
+        If marker_time_stamps and marker_labels, the arrays are stacked and returned as defined.
+
+    Parameters
+    ----------
+        marker_time_stamps (np.ndarray): 1D array containing the marker timestamps.
+        marker_labels (np.ndarray): 1D array containing the markers labels.
+        xdf_input_filepath (str): Filepath of the EEG recordings as xdf file.
+        
+    Returns
+    -------
+        markers_times_labels (np.ndarray): 2D array containing the markers's timestamps alongside their labels in this order: [marker_timestamps,marker_labels].
+    """
+    all_args = [xdf_input_filepath,marker_time_stamps,marker_labels]
+    is_all_none = all(element is None for element in all_args)
+    
+    if is_all_none:
+        raise Exception("No arguments specified.")
+    elif xdf_input_filepath:
+        #Retrieve directly from xdf file markers timestamps relative to recording start and their labels
+        mouse_markers_data = retrieve_stream_data_from_xdf(xdf_input_filepath=xdf_input_filepath,
+                                      stream_type="Markers",stream_name="MouseToNIC")
+        mouse_markers_labels = mouse_markers_data["data"]["time_series"]
+        mouse_markers_times = mouse_markers_data["data"]["timestamps"]
+        markers_times_labels=np.column_stack((mouse_markers_times,mouse_markers_labels))
+
+    else:
+        #stack given arrays to create the marker_times_labels array
+        markers_times_labels=np.column_stack((marker_time_stamps,marker_labels))
+    return markers_times_labels
 # =============================================================================
 ############################# show_markers  #####################################
 # =============================================================================
@@ -101,6 +246,46 @@ def show_markers(plot_type, markers_times_array: np.ndarray):
             # plot a line x=time_stamp associated to the i marker of type 110 (begining of task)
             marker110 = plot_type.axvline(x=i[0], color="r", label="100")
     return marker111, marker110
+
+def show_markers2(plot_type:plt, markers_times_array: np.ndarray):
+    """
+    Function that displays event markers as vertical lines on a graph (plt or axis). 
+    Inherits of the plot_type object to add marker to figure.
+
+    Parameters
+    ----------
+    plot_type (object): Parent graph object (plt, or axis)
+    markers_times_array (np.ndarray): 2D array of markers where column 1 is timestamps and column 2 marker labels in this order.
+
+    Returns
+    ----------
+        markers (list): List of axvline methods with specific arguments given
+    """
+    unique_labels=set()
+    markers=[]
+
+    # iterate over an array of markers
+    for marker in markers_times_array:
+        timestamp,label=marker
+        label=str(int(label))
+        # use different color for marker 111 and 100
+        if label == "111":
+            color = "b"
+        elif label == "100":
+            color = "r"
+        else:
+            color = "green"
+            
+        #each marker type corresponds to a unique label
+        if label in unique_labels:
+            label= None
+        else:
+            unique_labels.add(label)
+
+        marker_axvline_obj=plot_type.axvline(x=timestamp,color=color,label=label)
+        markers.append(marker_axvline_obj)
+
+    return markers
 
 # =============================================================================
 ############################# Single_plotter  #################################
@@ -1260,6 +1445,43 @@ def filter_signal(input_signals:np.array,sample_rate:int,order:int,cutofffreq:tu
         print(f"Specified cutofffreq={cutofffreq} - The tuple must contain only 2 or 3 elements as (low_cutoff_freq,high_cutoff_freq,notch_cutoff_freq)")
     return EEG_Filtered_NOTCH_BP, freq_test_BP, magnitude_test_BP
 
+# =============================================================================
+########################### Mouse Motion tracking  ############################
+# =============================================================================
+# compute the tangential speed
+
+def compute_tangential_speed(coordinates:np.ndarray,sample_rate:float):
+    """
+    Computes the tangential speed from xy coordinates.
+    
+    Parameters
+    ----------
+        coordinates (np.ndarray): 2D array containing X and Y mouse positions in first and second columns respectively
+        sample_rate (float) : sampling rate of the coordinates
+
+    Returns
+    ----------
+        vt (np.ndarray): 1D array instantaneous tangential speeds at each time.
+
+    """
+    #sampling period
+    Ts=1/sample_rate
+
+    x_coordinates=coordinates[:,0]
+    y_coordinates=coordinates[:,1]
+
+    #position difference between two consecutive samples
+    dx=np.diff(x_coordinates,prepend=0)
+    dy=np.diff(y_coordinates,prepend=0)
+
+    #compute the instantaneous speeds in each direction
+    vx=dx/Ts
+    vy=dy/Ts
+
+    #compute the total tangential speed
+    vt=np.sqrt(vx**2+vy**2)
+
+    return vt
 
 # =============================================================================
 ############################## Matlab vs Python  ##############################
