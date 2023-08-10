@@ -34,9 +34,9 @@ def stream_Finder_by_name(datalist, name):
             # print(i["info"]["type"])
             return streamindex
         
-def list_stream_names(stream_list:list):
+def list_stream_ids(stream_list:list):
     """
-    Lists the name of the streams founded by pyxdf's multistream importer.
+    Lists the names and types of the streams founded by pyxdf's multistream importer.
 
     Parameters:
     ----------
@@ -44,19 +44,27 @@ def list_stream_names(stream_list:list):
 
     Returns:
     --------
-        - stream_names (list): list of names of the founded streams
+        - stream_ids(dict): Dictionary of stream names and types
+            - "names": stream_names (list): list of founded streams names
+            - "types": stream_types (list): list of founded streams types
     """
     stream_names=[]
+    stream_types=[]
 
     for stream in stream_list:
         stream_name=stream["info"]["name"][0]
         stream_names.append(stream_name)
-    
-    return stream_names
+        stream_type=stream["info"]["type"][0]
+        stream_types.append(stream_type)
 
-def retrieve_stream_data_from_xdf(xdf_input_filepath:str,stream_type:str,stream_name:str=None):
+    stream_ids={"names":stream_names,"types":stream_types}
+    
+    return stream_ids
+
+def retrieve_stream_data_from_xdf(xdf_input_filepath:str=None,stream_type:str=None,stream_name:str=None):
     """
     Retrieves data and recording setup information from a selected stream of an xdf file and return them tidied for ReArm needs.
+    
 
     Returns the data as a nested dictionary.
     
@@ -65,7 +73,7 @@ def retrieve_stream_data_from_xdf(xdf_input_filepath:str,stream_type:str,stream_
     Parameters:
     -----------
         - xdf_input_filepath (str): Filepath towards xdf file to analyze
-        - stream_type (str) : Type of the stream to look for
+        - stream_type (str): (optional) Type of the stream to look for.
         - stream_name (str): (optional) Name of the stream if multiple are found.
 
     Returns:
@@ -87,19 +95,30 @@ def retrieve_stream_data_from_xdf(xdf_input_filepath:str,stream_type:str,stream_
                     - "recording_end" : recording_end (float) - last_timestamp (units?)
 
     """
-    
-    if stream_name is not None:
+
+    if  xdf_input_filepath is None:
+        raise Exception(f"xdf_input_filepath was not specified: Argument must be specified to access xdf file and retrieve its data.")
+    if stream_type is None and stream_name is None :
+        stream_list, fileheader = pyxdf.load_xdf(xdf_input_filepath)
+        stream_ids = list_stream_ids(stream_list)
+        raise Exception(f"Both stream_type and stream_name were not specified: Please specify at least one of these arguments. \n Streams names found: {stream_ids['names']} \n Streams types found: {stream_ids['types']}")
+    elif stream_type is not None and stream_name is not None :
         stream_list, fileheader = pyxdf.load_xdf(xdf_input_filepath, select_streams=[{'type': stream_type,'name': stream_name}])
+    elif stream_name is not None:
+        stream_list, fileheader = pyxdf.load_xdf(xdf_input_filepath, select_streams=[{'name': stream_name}])
+        if len(stream_list) > 1:
+            stream_ids = list_stream_ids(stream_list)
+            raise Exception(f"More than one stream nammed '{stream_name}' was found - Corresponding stream types : {stream_ids['types']} \n Try specifying the stream type when calling the function. ")
     else :
         stream_list, fileheader = pyxdf.load_xdf(xdf_input_filepath, select_streams=[{'type': stream_type}])
+        if len(stream_list) > 1:
+            stream_ids = list_stream_ids(stream_list)
+            raise Exception(f"More than one stream of type '{stream_type}' was found - Corresponding stream names : {stream_ids['names']} \n Try specifying the stream name when calling the function. ")
 
-    if len(stream_list) > 1:
-        stream_names = list_stream_names(stream_list)
-        raise Exception(f"More than one stream nammed '{stream_type}' was found. Stream names : {stream_names} \n Try specifying the stream name when calling the function. ")
-
-    else:
-        stream_data = stream_list[0]
-        #print(EEG_data)
+    #access stream
+    stream_ids = list_stream_ids(stream_list)
+    print(f"Accessing stream: \nType: '{stream_ids['types'][0]}' | Name: '{stream_ids['names'][0]}'")
+    stream_data = stream_list[0]
 
     #get stream data
     stream_data_timestamps = stream_data["time_stamps"]
@@ -108,7 +127,7 @@ def retrieve_stream_data_from_xdf(xdf_input_filepath:str,stream_type:str,stream_
     #get channel names and units
     channel_names = []
     channel_units = []
-    if stream_type == "EEG":
+    if stream_type == "EEG" or stream_type == "Accelerometer":
         for i in range(stream_data_samples.shape[-1]):
             channel_i_name = stream_data["info"]["desc"][0]["channel"][i]["name"][0]
             channel_i_unit = stream_data["info"]["desc"][0]["channel"][i]["unit"][0]
