@@ -1,16 +1,141 @@
 
-from typing import Optional, Union, Literal, Tuple, Dict, List, Any
 import matplotlib.pyplot as plt
+import matplotlib.figure
 import numpy as np
+
+from matplotlib.axes import Axes
+from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset, inset_axes
+from matplotlib.backends.backend_pdf import PdfPages
+from typing import Optional, Union, Literal, Tuple, Dict, List, Any
+
 # xdf file importation
 import pyxdf
-from matplotlib.axes import Axes
 # library for creating filters
 from scipy.signal import welch, periodogram, get_window
 from scipy.signal.windows import hamming, boxcar
-from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset, inset_axes
+
 
 from my_filters import *
+
+# =============================================================================
+############################### General Tools  ################################
+# =============================================================================
+
+
+def merge_lists_alternatively(list1, list2) -> List:
+    """
+    Merges two lists by alternating the columns of each. 
+    The first column of the merged list will be the first column of `list1`, and the second will be the first of `list2` and so on.
+
+    Returns the filtered signal, and for filter characterization the frequency response (h) and its frequencies.
+
+    Parameters:
+    -----------
+        - `list1` (list) : List 1 to merge, its first column will be the first column of the `merged_list`
+        - `list2` (list) : List 2 to merge, its first column will be the second column of the `merged_list`
+
+
+    Returns:
+    -----------
+        - `merged_list` (list) : Resulting alternating list of `list1` and `list2` columns
+
+    """
+    merged_list = []
+    min_len = min(len(list1), len(list2))
+
+    for i in range(min_len):
+        merged_list.append(list1[i])
+        merged_list.append(list2[i])
+
+    # Append any remaining elements from the longer list
+    merged_list.extend(list1[min_len:])
+    merged_list.extend(list2[min_len:])
+
+    return merged_list
+
+
+def save_figures_to_pdf_single_per_page(pdf_filename: str, figures_list: list) -> None:
+    """
+    Saves a list of figures in a single PDF file.
+
+    Parameters:
+    ----------
+        - pdf_filename (str): Path of the desired pdf file.
+        - figures_list (list): list of figure objects.
+
+    Returns:
+    --------
+        None: This function does not return a value. It saves the figures to the specified PDF file.
+
+    Examples:
+    --------
+        # Create some sample data
+        x = [1, 2, 3, 4, 5]
+        y1 = [10, 5, 8, 4, 7]
+        y2 = [8, 6, 5, 2, 4]
+
+        # Create two Matplotlib figures
+        fig1, ax1 = plt.subplots()
+        ax1.plot(x, y1, label='Line 1')
+        ax1.set_title('Figure 1')
+
+        fig2, ax2 = plt.subplots()
+        ax2.plot(x, y2, label='Line 2')
+        ax2.set_title('Figure 2')
+
+        # Store the figures in a list
+        figure_list = [fig1, fig2]
+
+        # Save the figures to a PDF file
+        save_figures_as_pdf(pdf_filename='output.pdf', figures_list=figure_list)
+    """
+    pdf_file = PdfPages(pdf_filename)
+
+    # iterating over the numbers in list
+    for figure in figures_list:
+
+        # and saving the files
+        figure.savefig(pdf_file, format='pdf')
+
+    # close the object
+    pdf_file.close()
+
+
+def save_figures_to_pdf_multiple_per_page(figures: List[matplotlib.figure.Figure], filename: str, rows_per_page: int = 2) -> None:
+    """
+    Save a list of Matplotlib figures to a PDF file with control over the number of
+    rows of figures per page.
+
+    Parameters:
+    -----------
+        - `figures` (list): List of Matplotlib figure objects.
+        - `filename` (str): Name of the output PDF file.
+        - `rows_per_page` (int): Number of rows of figures per page.
+
+    Returns:
+    -----------
+        None: This function does not return a value. It saves the figures to the specified PDF file.
+    """
+
+    total_figures = len(figures)
+    total_pages = (total_figures + rows_per_page - 1) // rows_per_page
+    fig_width, fig_height = figures[0].get_size_inches()
+
+    with PdfPages(filename) as pdf:
+        for page_num in range(total_pages):
+            fig, axs = plt.subplots(rows_per_page, 1, figsize=(
+                fig_width, fig_height*rows_per_page))
+
+            for row in range(rows_per_page):
+                figure_index = page_num * rows_per_page + row
+                if figure_index < total_figures:
+                    figure = figures[figure_index]
+                    axs[row].imshow(figure.canvas.renderer.buffer_rgba())
+                    axs[row].axis('off')
+
+            plt.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
 
 
 # =============================================================================
@@ -234,13 +359,13 @@ def create_marker_times_labels_array2(marker_time_stamps: Optional[np.ndarray] =
 
     Parameters
     ----------
-        marker_time_stamps (np.ndarray): 1D array containing the marker timestamps.
-        marker_labels (np.ndarray): 1D array containing the markers labels.
-        xdf_input_filepath (str): Filepath of the EEG recordings as xdf file.
+        `marker_time_stamps` (np.ndarray): 1D array containing the marker timestamps.
+        `marker_labels` (np.ndarray): 1D array containing the markers labels.
+        `xdf_input_filepath` (str): Filepath of the EEG recordings as xdf file.
 
     Returns
     -------
-        markers_times_labels (np.ndarray): 2D array containing the markers's timestamps alongside their labels in this order: [marker_timestamps,marker_labels].
+        `markers_times_labels` (np.ndarray): 2D array containing the markers's timestamps alongside their labels in this order: [marker_timestamps,marker_labels].
     """
     all_args = [xdf_input_filepath, marker_time_stamps, marker_labels]
     is_all_none = all(element is None for element in all_args)
@@ -455,7 +580,7 @@ def compute_fft_on_all_channels2(channels_signals: np.ndarray, Fs: int | float):
 # =============================================================================
 
 
-def nearest_timestamps_array_finder2(EEG_times_stamps: np.ndarray, markers: np.ndarray):
+def nearest_timestamps_array_finder2(signal_times_stamps: np.ndarray, markers: np.ndarray):
     """
     Finds the nearest timestamps to each marker in EEG signal timestamps array 
 
@@ -465,7 +590,7 @@ def nearest_timestamps_array_finder2(EEG_times_stamps: np.ndarray, markers: np.n
 
     Parameters:
     -----------
-        EEG_times_stamps(np.ndarray): 1D array of the signal timestamps
+        signal_times_stamps(np.ndarray): 1D array of the signal timestamps
         markers (np.ndarray): 2D array (markers_original_timestamps,marker_labels)
     Returns:
     -------
@@ -480,11 +605,11 @@ def nearest_timestamps_array_finder2(EEG_times_stamps: np.ndarray, markers: np.n
         original_time_stamp = markers[i, 0]
         # array of differences beween the eeg times and the original marker' timestamp
         difference_array = np.absolute(
-            EEG_times_stamps-original_time_stamp)
+            signal_times_stamps-original_time_stamp)
         # find the index of the minimal difference in the markers times stamps (nearest timestamp)
         index = difference_array.argmin()
         # append it to the liste of nearest timestamps
-        nearest_time_stamps.append(EEG_times_stamps[index])
+        nearest_time_stamps.append(signal_times_stamps[index])
         nearest_time_stamps_indices.append(index)
 
     nearest_time_stamps = np.array(nearest_time_stamps)
@@ -496,25 +621,25 @@ def nearest_timestamps_array_finder2(EEG_times_stamps: np.ndarray, markers: np.n
     return nearest_indices_timestamps
 
 
-def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.ndarray):
+def nearest_timestamps_array_finder(signal_times_stamps: np.ndarray, markers: np.ndarray):
     """
-    Finds the nearest marker timestamps corresponding to a sample in EEG signal timestamps array.
+    Finds the nearest marker timestamps corresponding to a sample in `signal_timestamps` array.
 
-    For each marker timestamp, the function looks for the nearest timestamp in EEG signal timestamps array
+    For each `markers` timestamp, the function looks for the nearest timestamp in `signal_timestamps` array
     and its corresponding index.
 
     Application: 
-        Useful when the markers timestamps may not be found in the EEG data due to Srate and time launch.
-            ie: if the marker timestamps are foudn between two signal samples.
+        Useful when the markers timestamps may not be found in the signal due to sampling rate and time syncrhonization considerations.
+            ie: if the marker timestamps are found between two signal samples.
 
     Parameters:
     -----------
-        EEG_times_stamps (np.ndarray): 1D array of the signal timestamps
-        markers (np.ndarray): 2D array (markers_original_timestamps,marker_labels)
+        `signal_times_stamps` (np.ndarray): 1D array of the signal timestamps
+        `markers` (np.ndarray): 2D array (markers_original_timestamps,marker_labels)
 
     Returns:
     -------
-        nearest_indices_timestamps (dict): Dictionary of 3 key-value pairs, each value being a 1D array
+        `nearest_indices_timestamps` (dict): Dictionary of 3 key-value pairs, each value being a 1D array
             "markers_timestamps" :  1D array of the timestamps associated to each marker.\n
             "markers_timestamp_indices" : 1D array of the index values of the associated timestamps in the signal time array.\n
             "marker_labels" : 1D array of the marker labels.\n
@@ -528,11 +653,11 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
         original_time_stamp = y
         # array of differences beween the eeg times and the original marker' timestamp
         difference_array = np.absolute(
-            EEG_times_stamps-original_time_stamp)
+            signal_times_stamps-original_time_stamp)
         # find the index of the minimal difference in the markers times stamps (nearest timestamp)
         index = difference_array.argmin()
         # append it to the liste of nearest timestamps
-        nearest_time_stamps.append(EEG_times_stamps[index])
+        nearest_time_stamps.append(signal_times_stamps[index])
         nearest_time_stamps_indices.append(index)
 
     # convert the list to array
@@ -1100,6 +1225,43 @@ def extract_data_epochs(signal: np.ndarray, sample_rate: float, markers_labels_t
         `epoched_signals` (dict): Dictionary of epoched signals for each marker type
             Keys (str): "label_markertype"
             values (np.ndarray): 2D array of signal data epochs arranged as a column per event
+
+    Examples:
+    ----------
+    ## Create a 1D array of signals
+
+    ### Define the sample rate and duration
+    srate= 12  # samples per second
+    duration = 8
+
+    ### Calculate the total number of samples
+    num_samples = int(srate * duration)
+
+    ### Generate a time array with equally spaced time points
+    times = np.linspace(0, duration, num_samples, endpoint=False)
+
+    ### Generate a 2d array of samples  composed of 1 signals (columns)
+    samples = np.random.uniform(low=-20, high=20, size=(num_samples,1))
+
+    ## Create a 2d array of marker timestamps and labels
+        labels = [100,111,100,111,100,111]
+        timestamps = [1.2,2.2,3.2,4.2,5.2,6.2]
+        marker_timestamps_labels = create_marker_times_labels_array2(marker_labels=labels,marker_time_stamps=timestamps)
+
+    ## Find the nearest sample timestamp to each marker
+        nearest_markers_array = nearest_timestamps_array_finder(signal_times_stamps=times,markers=marker_timestamps_labels)
+        print(nearest_markers_array["markers_timestamps"])
+
+    ## Epoch the signals at once
+    epoch_limits=(0,1)
+    eeg_signals_epoched=extract_data_epochs(signals=samples,sample_rate=srate,markers_labels_times=nearest_markers_array,
+                                                         select_events=(100,111),epoch_limits=epoch_limits)
+
+    ## Note: negative first epoch limit means before the event, postive means after
+        ex1: (0,4) - From 0 sec before(/after) to 4 sec after the time-locking event.
+        ex2: (1,2) - From 1 sec after to 2 sec after the time-locking event.
+        ex3: (-1,2) - From 1 sec before to 2 sec after the time-locking event.
+
     """
     # convert the marker_labels_times dictionary to a 2D array
     array_markers_labels_times = np.column_stack(
@@ -1186,7 +1348,7 @@ def compute_welch_estimation_on_segment2(segment: np.ndarray, sample_rate: float
 
 def compute_psds_for_each_epoch(epochs: np.ndarray, sample_rate: float, nfft: Optional[int] = None):
     """
-    Computes the the PSD of several epochs.
+    Computes the the PSD of multiple signal epochs.
 
     Parameters
     ----------
@@ -1389,6 +1551,161 @@ def compute_welch_on_a_signal_after_each_marker(signal: np.ndarray, sample_rate:
     return {"PSD_frequencies": freqs_for_all_markers, "PSD_magnitudes": PSDs_for_all_markers}
 
 
+def extract_data_epochs_from_all_signals(signals: np.ndarray[Any, np.dtype[Union[np.float32, np.float64, np.int32]]], sample_rate: Union[float, int],
+                                         markers_labels_times: dict, select_events: tuple,
+                                         epoch_limits: tuple[float, float]) -> dict:
+    """
+    Extracts data epochs from multiple signals at once.
+
+    Based on extract_data_epochs which is called for each signal and stores the epochs as a dictionary where each signal is a key.
+
+    Parameters:
+    -----------
+        - `signals` (np.ndarray): 2D array of signals where each signal represents a column (axis=1)
+        - `sample_rate` (Union[float, int]): Signal sampling rate
+        - `markers_labels_times` (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        - `epoch_limits` (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
+
+    Returns:
+    -----------
+        - `epoched_signals` (dict): dictionary of epoched signals for all signals
+            - keys (str): `channel_name` ("Channel_i")
+            - value (dict): `epochs_dict`
+                - key (str): "Epochs"
+                - value (dict) : `time_signal_epochs_dict`
+                    - key (str): "time_signals"
+                    - value(dict) : epoched_signal (<= extract_data_epochs output)
+                        - keys(str) : epoch_labels ("label_markertype")
+                        - value (dict) : time_signals
+                            - keys (str): "signal_segments"|"time_segments"
+                            - values (np.ndarray): 2D array of signal data epochs arranged as a column per event
+
+    Examples:
+    ----------
+    # Create a 2D array of signals
+        # Define the sample rate and duration
+        srate= 12  # samples per second
+        duration = 8
+        # Calculate the total number of samples
+        num_samples = int(srate * duration)
+
+        # Generate a time array with equally spaced time points
+        times = np.linspace(0, duration, num_samples, endpoint=False)
+
+        # Generate a 2d array of samples  composed of 6 signals (columns)
+        samples = np.random.uniform(low=-20, high=20, size=(num_samples,6))
+
+    # Create a 2d array of marker timestamps and labels
+        labels = [100,111,100,111,100,111]
+        timestamps = [1.2,2.2,3.2,4.2,5.2,6.2]
+        marker_timestamps_labels = create_marker_times_labels_array2(marker_labels=labels,marker_time_stamps=timestamps)
+
+    # Find the nearest sample timestamp to each marker
+        nearest_markers_array = nearest_timestamps_array_finder(signal_times_stamps=times,markers=marker_timestamps_labels)
+        print(nearest_markers_array["markers_timestamps"])
+
+    # Epoch the signals at once
+    epoch_limits=(0,1)
+    eeg_signals_epoched=extract_data_epochs_from_all_signals(signals=samples,sample_rate=srate,markers_labels_times=nearest_markers_array,
+                                                         select_events=(100,111),epoch_limits=epoch_limits)
+
+    Note: negative first epoch limit means before the event, postive means after
+        ex1: (0,4) - From 0 sec before(/after) to 4 sec after the time-locking event.
+        ex2: (1,2) - From 1 sec after to 2 sec after the time-locking event.
+        ex3: (-1,2) - From 1 sec before to 2 sec after the time-locking event.
+
+    """
+
+    epoched_signals = {}
+    for signal_index in range(signals.shape[1]):
+        epochs_dict = {}
+        time_signal_epochs_dict = {}
+        print(len(signals[:, signal_index]))
+        epoched_signal = extract_data_epochs(signal=signals[:, signal_index], sample_rate=sample_rate,
+                                             markers_labels_times=markers_labels_times, select_events=(111, 100), epoch_limits=epoch_limits)
+
+        time_signal_epochs_dict["time_signals"] = epoched_signal
+        epochs_dict["Epochs"] = time_signal_epochs_dict
+
+        channel_name = f"Channel_{signal_index+1}"
+        epoched_signals[channel_name] = epochs_dict
+
+    return epoched_signals
+
+
+def compute_psds_for_each_epoch_all_signals(input_dict: dict, sample_rate: Union[float, int], nfft: Optional[Union[float, int]] = None):
+    """
+    Computes the PSDs of each epoch for all signals
+
+    Parameters:
+    ----------
+        - `input_dict`(dict): Dictionary of epoched signals (output of `extract_data_epochs_from_all_signals()`)
+        - `sample_rate`(float,int): Sampling rate of the signals.
+        - `nfft`(float,int): length of the FFT (if zero padded fft wanted), Defaults to None
+
+    Retruns:
+    -----------
+        Input_dict with new "PSDs" key in Epochs dictionary alongside "time_signals" as output_dict
+        - `output_dict` (dict): Dictionary of epoched signals for all signals and their PSDs
+            - keys (str): `channel_name` ("Channel_i")
+            - value (dict): `epochs_dict`
+                - key (str): "Epochs"
+                - value (dict) : `time_signal_epochs_dict`
+                    - keys (str): "time_signals", "PSDs"
+                    - values (dict) : epoched_signal (<= extract_data_epochs output), psd_results_all_epochs_of_type_i (<= compute_psds_for_each_epoch output)
+
+    Examples:
+    ----------
+    # Create a 2D array of signals
+        # Define the sample rate and duration
+        srate= 12  # samples per second
+        duration = 8
+        # Calculate the total number of samples
+        num_samples = int(srate * duration)
+
+        # Generate a time array with equally spaced time points
+        times = np.linspace(0, duration, num_samples, endpoint=False)
+
+        # Generate a 2d array of samples  composed of 6 signals (columns)
+        samples = np.random.uniform(low=-20, high=20, size=(num_samples,6))
+
+    # Create a 2d array of marker timestamps and labels
+        labels = [100,111,100,111,100,111]
+        timestamps = [1.2,2.2,3.2,4.2,5.2,6.2]
+        marker_timestamps_labels = create_marker_times_labels_array2(marker_labels=labels,marker_time_stamps=timestamps)
+
+    # Find the nearest sample timestamp to each marker
+        nearest_markers_array = nearest_timestamps_array_finder(signal_times_stamps=times,markers=marker_timestamps_labels)
+        print(nearest_markers_array["markers_timestamps"])
+
+    # Epoch the signals at once
+        epoch_limits = (0,1)
+        signals_epoched = extract_data_epochs_from_all_signals(signals=samples,sample_rate=srate,markers_labels_times=nearest_markers_array,
+                                                            select_events=(100,111),epoch_limits=epoch_limits)
+    # Compute PSD for all epochs of all signals at once
+        fft_length=len(signals_epoched["Channel_1"]["Epochs"]["time_signals"]["label_111"]["signal_segments"])
+        signals_epochs_psds = compute_psds_for_each_epoch_all_signals(input_dict=signals_epoched,sample_rate=srate,
+                                                                        nfft=fft_length)
+        signals_epochs_psds["Channel_1"]["Epochs"]["PSDs"]["label_100"]["PSD_magnitudes"]
+
+    Note: By default the length of the fft used to perform dsp estimation is the length of the epoch (nfft=None)
+    """
+    output_dict = input_dict.copy()
+
+    for channel_name in input_dict:
+        psd_results_all_epochs_of_type_i = {}
+        # print(f"key1= {channel_name}")
+        for epoch_label in input_dict[channel_name]["Epochs"]["time_signals"]:
+            # print(f"key3= {epoch_label}")
+            # print(input_dict[channel_name]["Epochs"]["time_signals"][epoch_label]["signal_segments"])
+            psd_results_all_epochs = compute_psds_for_each_epoch(input_dict[channel_name]["Epochs"]["time_signals"][epoch_label]["signal_segments"],
+                                                                 sample_rate=sample_rate, nfft=nfft)
+            psd_results_all_epochs_of_type_i[epoch_label] = psd_results_all_epochs
+        output_dict[channel_name]["Epochs"]["PSDs"] = psd_results_all_epochs_of_type_i
+
+    return output_dict
+
+
 # =============================================================================
 ############################# Signal preprocessing  ###########################
 # =============================================================================
@@ -1511,23 +1828,22 @@ def filter_signal(input_signals: np.ndarray[Any, np.dtype[Union[np.float32, np.f
     return EEG_Filtered_NOTCH_BP, freq_test_BP, magnitude_test_BP
 
 # =============================================================================
-########################### Mouse Motion tracking  ############################
+##############################  Motion tracking  ##############################
 # =============================================================================
-# compute the tangential speed
 
 
-def compute_tangential_speed(coordinates: np.ndarray, sample_rate: float):
+def compute_tangential_speed(coordinates: np.ndarray, sample_rate: float) -> np.ndarray:
     """
     Computes the tangential speed from xy coordinates.
 
     Parameters:
     ----------
-        coordinates (np.ndarray): 2D array containing X and Y mouse positions in first and second columns respectively
-        sample_rate (float) : sampling rate of the coordinates
+        - `coordinates` (np.ndarray): 2D array containing X and Y mouse positions in first and second columns respectively
+        - `sample_rate` (float) : sampling rate of the coordinates
 
     Returns:
     ----------
-        vt (np.ndarray): 1D array instantaneous tangential speeds at each time.
+        - `vt` (np.ndarray): 1D array instantaneous tangential speeds.
 
     """
     # sampling period
@@ -1548,6 +1864,23 @@ def compute_tangential_speed(coordinates: np.ndarray, sample_rate: float):
     vt = np.sqrt(vx**2+vy**2)
 
     return vt
+
+
+def compute_total_acceleration(accelerations_array: np.ndarray) -> np.ndarray:
+    """
+    Computes the euclidian norm of the acceleration among multiple axis
+
+    Parameters:
+    ----------
+        - `accelerations_array` (np.ndarray): 2D array of accelerations, each column represents the accelerations of a given axis.
+
+    Retruns:
+    -----------
+        - `accelerations_norms` (np.ndarray): 1D array of acceleration norms.
+    """
+    # Compute the Euclidean norm (magnitude) for each row (acceleration vector)
+    accelerations_norms = np.linalg.norm(accelerations_array, axis=1)
+    return accelerations_norms
 
 # =============================================================================
 ############################## Matlab vs Python  ##############################
