@@ -298,7 +298,7 @@ def custom_band_pass_filter(sample_rate: Union[float, int], low_cutoff_freq: Uni
 
 
 def notch_filter(sample_rate: Union[float, int], cutoff_freq: Union[float, int],
-                 stop_band_width: Union[float, int], input_signal: Optional[np.ndarray] = None) -> Tuple[Optional[np.ndarray], np.ndarray, np.ndarray]:
+                 stop_band_width: Union[float, int], input_signal: Optional[np.ndarray] = None) -> Tuple[Union[np.ndarray, None], np.ndarray, np.ndarray]:
     """
     Creates a notch filter and filters the input signal.
 

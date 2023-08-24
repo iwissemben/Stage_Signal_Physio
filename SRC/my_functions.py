@@ -1,9 +1,11 @@
 
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import matplotlib.figure
-import numpy as np
 
-from matplotlib.axes import Axes
+import matplotlib.lines as LineType
+
+import numpy as np
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset, inset_axes
 from matplotlib.backends.backend_pdf import PdfPages
 from typing import Optional, Union, Literal, Tuple, Dict, List, Any
@@ -11,7 +13,7 @@ from typing import Optional, Union, Literal, Tuple, Dict, List, Any
 # xdf file importation
 import pyxdf
 # library for creating filters
-from scipy.signal import welch, periodogram, get_window
+from scipy.signal import welch, periodogram, get_window, argrelextrema, convolve
 from scipy.signal.windows import hamming, boxcar
 
 
@@ -65,7 +67,7 @@ def save_figures_to_pdf_single_per_page(pdf_filename: str, figures_list: list) -
 
     Returns:
     --------
-        None: This function does not return a value. It saves the figures to the specified PDF file.
+        - `None` (bool): This function does not return a value. It saves the figures to the specified PDF file.
 
     Examples:
     --------
@@ -114,7 +116,7 @@ def save_figures_to_pdf_multiple_per_page(figures: List[matplotlib.figure.Figure
 
     Returns:
     -----------
-        None: This function does not return a value. It saves the figures to the specified PDF file.
+        - `None` (bool): This function does not return a value. It saves the figures to the specified PDF file.
     """
 
     total_figures = len(figures)
@@ -192,7 +194,7 @@ def list_stream_ids(stream_list: list):
 
 
 def retrieve_stream_data_from_xdf(xdf_input_filepath: Optional[str] = None, stream_type: Optional[str] = None,
-                                  stream_name: Optional[str] = None) -> dict[str, np.ndarray]:
+                                  stream_name: Optional[str] = None) -> dict:
     """
     Retrieves data and recording setup information from a selected stream of an xdf file and return them tidied for ReArm needs.
 
@@ -354,18 +356,18 @@ def create_marker_times_labels_array2(marker_time_stamps: Optional[np.ndarray] =
                                       xdf_input_filepath: Optional[str] = None) -> np.ndarray:
     """
     Create an array combining the markers labels and their timestamps.
-        If xdf file specified, timestamps are retrieved from the file (mouse marker stream).
-        If marker_time_stamps and marker_labels, the arrays are stacked and returned as defined.
+        If `xdf file specified`, timestamps are retrieved from the file (mouse marker stream).
+        If `marker_time_stamps` and `marker_labels`, the arrays are stacked and returned as defined.
 
     Parameters
     ----------
-        `marker_time_stamps` (np.ndarray): 1D array containing the marker timestamps.
-        `marker_labels` (np.ndarray): 1D array containing the markers labels.
-        `xdf_input_filepath` (str): Filepath of the EEG recordings as xdf file.
+        - `marker_time_stamps` (np.ndarray): 1D array containing the marker timestamps.
+        - `marker_labels` (np.ndarray): 1D array containing the markers labels.
+        - `xdf_input_filepath` (str): Filepath of the EEG recordings as xdf file.
 
     Returns
     -------
-        `markers_times_labels` (np.ndarray): 2D array containing the markers's timestamps alongside their labels in this order: [marker_timestamps,marker_labels].
+        - `markers_times_labels` (np.ndarray): 2D array containing the markers's timestamps alongside their labels in this order: [marker_timestamps,marker_labels].
     """
     all_args = [xdf_input_filepath, marker_time_stamps, marker_labels]
     is_all_none = all(element is None for element in all_args)
@@ -391,21 +393,25 @@ def create_marker_times_labels_array2(marker_time_stamps: Optional[np.ndarray] =
 # =============================================================================
 
 
-def show_markers(plot_type, markers_times_array: np.ndarray):
+def show_markers(plot_type: plt.Axes, markers_times_array: np.ndarray) -> Tuple[LineType.Line2D, LineType.Line2D]:
     """
     Custom function to display event markers as vertical lines on a graph (plt or axis). 
 
-    Inherits of the plot_type object to add marker to figure.
+    Inherits of the `plot_type` object to add marker to figure.
 
-    Arguments:
-    Markers_times_labels as a 2d array of markers with corresponding timestamps as [Marker,Timestamp]
-    Required : plot_type, markers_times_array.
-
-    inputs: object (plt, or axis[a,b]), numpy.ndarray(2D).
-    outputs: [None]
+    Parameters:
+    ------------
+        - `markers_times_array` (np.ndarray): 2D array of markers with corresponding timestamps as [Marker,Timestamp]
+        - `plot_type` (plt.Axes): plt.Axes object
+    Returns:
+    ------------
+        - `marker111` (LineType.Line2D): Line for plot
+        - `marker100` (LineType.Line2D): Line for plot
     """
 
 # iterate over an array of markers
+    marker111 = plot_type.axvline()
+    marker100 = plot_type.axvline()
     for i in markers_times_array:
         if i[1] == 111:
             # print(i)
@@ -415,11 +421,11 @@ def show_markers(plot_type, markers_times_array: np.ndarray):
         else:
             # print(i)
             # plot a line x=time_stamp associated to the i marker of type 110 (begining of task)
-            marker110 = plot_type.axvline(x=i[0], color="r", label="100")
-    return marker111, marker110
+            marker100 = plot_type.axvline(x=i[0], color="r", label="100")
+    return marker111, marker100
 
 
-def show_markers2(plot_type: Union[Axes, Figure],
+def show_markers2(plot_type: plt.Axes,
                   markers_times_array: np.ndarray) -> list:
     """
     Function that displays event markers as vertical lines on a graph (plt or axis). 
@@ -427,7 +433,7 @@ def show_markers2(plot_type: Union[Axes, Figure],
 
     Parameters:
     ----------
-    plot_type (object): Parent graph object (plt, or axis)
+    plot_type (plt.Axes): Parent graph object (plt.Axes)
     markers_times_array (np.ndarray): 2D array of markers where column 1 is timestamps and column 2 marker labels in this order.
 
     Returns:
@@ -468,22 +474,34 @@ def show_markers2(plot_type: Union[Axes, Figure],
 
 def single_plot(filename: str, x: np.ndarray, y: np.ndarray, fig_title: str,
                 xlabel: str, ylabel: str, markers_times_array: Optional[np.ndarray] = None, point_style: str = "-k",
-                line_width: int | float = 1, fig_number: Optional[int] = None):
+                line_width: int | float = 1, fig_number: Optional[int] = None) -> None:
     """
     Custom multipurpose function that displays a single graph
 
     Single_plot uses the x and y datas as inputs for the plot.
-    Optionally calls show_markers function.
+    Optionally calls show_markers function.`
 
     Parameters:
     -----------
-        Required: filename, figure number,figure, title, labels are other arguments used to generate the figure.
-        Optional : Markers_times_labels as a 2d array of markers with corresponding timestamps as [Marker,Timestamp]
+        - `filename` (str): Filename
+        - `x` (np.ndarray): x series
+        - `y` (np.ndarray): y series
+        - `fig_title` (str): figure title
+        - `xlabel` (str): x axis label
+        - `ylabel` (str): y axis label
+        - `markers_times_array`(optional(np.ndarray)): 
+        - `point_style` (str): point style
+        - `line_width` (float,int): line width
+        - `fig_number` (optional(int)): figure number
 
-    inputs: [str,int,numpy.ndarray(1D),numpy.ndarray(1D),str,str,str,numpy.ndarray(2D),str,float]
-    outputs: [None]
+    Returns:
+    -----------
+        - `None` (bool): This function does not return a value. It plots the figure.
+
     """
+
     # Creation of the figure
+    """
     if fig_number:
         plt.figure(fig_number)
     plt.plot(x, y, point_style, lw=line_width)
@@ -494,16 +512,27 @@ def single_plot(filename: str, x: np.ndarray, y: np.ndarray, fig_title: str,
     # Displays markers (optional)
     if markers_times_array is not None:
         show_markers(plt, markers_times_array)
-    plt.legend()
-    plt.show()
+    """
+
+    figure, axis = plt.subplots(num=fig_number, layout="constrained")
+    figure.suptitle(f"{fig_title} \n {filename}")
+    axis.set_xlabel(f"{xlabel}")
+    axis.set_ylabel(f"{ylabel}")
+    axis.plot(x, y, point_style, lw=line_width)
+
+    # Displays markers (optional)
+    if markers_times_array is not None:
+        show_markers(axis, markers_times_array)
+    figure.legend()
+    figure.show()
 
 # =============================================================================
 ############################# Mosaic_plotter  #################################
 # =============================================================================
 
 
-def mosaic_plot(figure, axis, filename: str, x: np.ndarray, y: np.ndarray, fig_title: str,
-                xlabel: str, ylabel: str, channels: dict, markers_labels_times: Optional[np.ndarray] = None):
+def mosaic_plot(figure: matplotlib.figure.Figure, axis: np.ndarray, filename: str, x: np.ndarray, y: np.ndarray, fig_title: str,
+                xlabel: str, ylabel: str, channels: dict, markers_labels_times: Optional[np.ndarray] = None) -> None:
     """
     Custom function that display a mosaic of graphs for each channel
 
@@ -513,12 +542,21 @@ def mosaic_plot(figure, axis, filename: str, x: np.ndarray, y: np.ndarray, fig_t
 
     Plotting and labels goes by iteration on each cell before showing the figure with title.
 
-    Arguments:
-        Required: filename, x, y, figure, axis, fig_title, xlabel, ylabel, channels
-        Optional : Markers_times_labels as a 2d array of markers with corresponding timestamps as [Marker,Timestamp]
-
-    inputs: [str,numpy.ndarray(1D),numpy.ndarray(2D),numpy.ndarray(2D),matplotlib.figure.Figure,numpy.ndarray,str,str,dict(str:str)] 
-    outputs: [None]
+    Parameters:
+    -----------
+        - `figure` (matplotlib.figure.Figure) : Figure object
+        - `axis` (np.ndarray): array of axis objects of the Figure
+        - `filename`: Filename
+        - `x` (np.ndarray): x series as columns
+        - `y` (np.ndarray): y series as columns
+        - `fig_title` (str): figure title
+        - `xlabel` (str): x axis label
+        - `ylabel` (str): y axis label
+        - `channels`(dict) : dictionary of channels names
+        - `markers_labels_times`(np.ndarray): 2D array of markers with corresponding timestamps as [Marker,Timestamp]
+    Results:
+    -----------
+        - `None` (bool): This function does not return a value. It plots the figure.
     """
     count = 0
     # Get the figure's geometry
@@ -542,6 +580,43 @@ def mosaic_plot(figure, axis, filename: str, x: np.ndarray, y: np.ndarray, fig_t
     plt.suptitle(fig_title+"\n"+filename)
     plt.legend()
 
+
+def annotate_local_extrema(x: np.ndarray, y: np.ndarray, axis: plt.Axes, order: int = 1, window_size: int = 1):
+    """
+    Detects local extrema of a given distribution, and anotates a plot to highlight the extrema coordinates.
+    - Relies on the scipy argrelextrema function to compare each value to its n=order neigboors on each side.
+    - Relies on the scipy convolve function to compute a moving average of the distribution (extrema detection resolution).
+
+    Parameters
+    ----------
+
+        - `x`: values of the distribution
+        - `y`: amplitudes of the distribution
+        - `axis`: parent plot on which annotation will be added
+        - `order`: Number of neighboor points to consider for comparison
+        - `window-size` (int): number of points used for computing the moving average of the distribution
+    Returns:
+    ----------
+    """
+    # Apply moving average smoothing
+    smoothed_y = convolve(y, np.ones(window_size) / window_size, mode='same')
+
+    # Find indices of local maxima and minima in the smoothed data
+    local_maxima_indices = argrelextrema(
+        smoothed_y, np.greater, order=order)[0]
+    local_minima_indices = argrelextrema(smoothed_y, np.less, order=order)[0]
+
+    # Annotate local maxima
+    for i in local_maxima_indices:
+        max_coords = (x[i], y[i])
+        axis.annotate(f'Max: {max_coords}', xy=max_coords, xytext=(10, 10), textcoords='offset points', bbox=dict(boxstyle='round, pad=0.2', fc='white', ec='none', alpha=0.8),
+                      arrowprops=dict(arrowstyle="->", color='r'))
+
+    # Annotate local minima
+    for i in local_minima_indices:
+        min_coords = (x[i], y[i])
+        axis.annotate(f'Min: {min_coords}', xy=min_coords, xytext=(10, -10), textcoords='offset points', bbox=dict(boxstyle='round, pad=0.2', fc='white', ec='none', alpha=0.8),
+                      arrowprops=dict(arrowstyle="->", color='b'))
 # =============================================================================
 ############################# Compute_FFT_on_channels  ########################
 # =============================================================================
@@ -685,12 +760,22 @@ def nearest_timestamps_array_finder(signal_times_stamps: np.ndarray, markers: np
 # =============================================================================
 
 
-def get_segment_coordinates(reference_index: int, segment_length: int, debug: bool = False):
+def get_segment_coordinates(reference_index: int, segment_length: int, debug: bool = False) -> Tuple[int, int, int]:
     """
-    Computes the coordinates of a segment for psd calculation
+    [obsolete] Computes the coordinates of a segment for psd calculation relative to a reference.
 
-    inputs:int,int
-    outputs:int,int,int
+    Parameters:
+    -----------
+        - `reference_index` (int): index of referece
+        - `segment_length` (int): length of the desired segment
+        - `debug` (bool): option to display segment coordinates for control
+
+    Returns:
+    -----------
+        - `lower_end` (int): index of segments lower end
+        - `higher_end`(int): index of segments higher end
+        - `reference_end`(int): reference end  index
+
     """
 
     # Define the segment coordinates (start,end)
@@ -716,31 +801,33 @@ def get_segment_coordinates(reference_index: int, segment_length: int, debug: bo
     return lower_end, higher_end, reference_end
 
 
-def compute_welch_estimation_on_segment(signal: np.ndarray, direction: str, sample_rate: int,
-                                        reference_end: int, lower_end: int, higher_end: int, delta_index: int):
+def compute_welch_estimation_on_segment(signal: np.ndarray, direction: str, sample_rate: Union[float, int],
+                                        reference_end: int, lower_end: int, higher_end: int, delta_index: int) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Computes the psd estimation(welch method) on a specific segment of a time signal.
+    [obsolete] Computes the psd estimation(welch method) on a specific segment of a time signal.
 
     inputs:numpy.ndarray(1D),str,numpy.ndarray(2D),float,str
     outputs:numpy.ndarray(1D),numpy.ndarray(1D) as columns
     """
+    freq = np.ndarray([1, 1])
+    Pxx_density = np.ndarray([1, 1])
     if direction == "before":
         freq, Pxx_density = welch(signal[lower_end:reference_end+1],
                                   fs=sample_rate, window="hann",
-                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)
+                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)  # type: ignore
     elif direction == "after":
         freq, Pxx_density = welch(signal[reference_end:higher_end+1],
                                   fs=sample_rate, window="hann",
-                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)
+                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)  # type: ignore
     else:
         print("Wrong direction provided, please specify either 'before' or 'after'")
     return freq, Pxx_density
 
 
-def compute_lagged_psds_one_signal(signal: np.ndarray, Srate: float | int, markers: np.ndarray,
-                                   time_lag: float | int = 1, direction: str = "before"):
+def compute_lagged_psds_one_signal(signal: np.ndarray, Srate: Union[float, int], markers: np.ndarray,
+                                   time_lag: Union[float, int] = 1, direction: str = "before") -> Tuple[np.ndarray, np.ndarray]:
     """
-    Computes psd estimation (welch) on segments of a time signal around list of references.
+    [obsolete] Computes psd estimation (welch) on segments of a time signal around list of references.
 
     For each index references (markers) the function delimits a segment of chosen time length and direction (before after ref).
     Performs the welch method on the segment and returns two 1D arrays(column) on for frequencies other for psd resutls.
@@ -754,6 +841,8 @@ def compute_lagged_psds_one_signal(signal: np.ndarray, Srate: float | int, marke
     electrode_lagged_PSDS = []
     elecrode_frequencies = []
 
+    electrode_stacked_frequencies = np.ndarray([1, 1])
+    electrode_stacked_markers = np.ndarray([1, 1])
     # iterate on the markers to compute on each the psd on a given direction
     for timestamp_index in markers[:, 0]:
         # get the coordinates of the segment on which the psd will be computed
@@ -776,7 +865,7 @@ def compute_lagged_psds_one_signal(signal: np.ndarray, Srate: float | int, marke
 def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int, markers: np.ndarray,
                                        time_lag: float | int = 1, direction: str = "before"):
     """
-    Computes psd estimation (welch) on segments of multiple time signals around list of references
+    [obsolete] Computes psd estimation (welch) on segments of multiple time signals around list of references
 
     inputs:numpy.ndarray(2D),float,numpy.ndarray(2D),float,str
     outputs:numpy.ndarray(3D),numpy.ndarray(3D)
@@ -802,18 +891,18 @@ def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int,
 # =============================================================================
 
 
-def create_positive_frequency_vector(Fs: int, N: int) -> np.ndarray:
+def create_positive_frequency_vector(Fs: Union[float, int], N: int) -> np.ndarray:
     """
         Create positive frequency vector.
 
         Parameters:
-        ----------
-        Fs (int): Sampling frequency of the signal (in Hz)
-        N (int): Length of the signal
+        -----------
+        - `Fs` (float,int): Sampling frequency of the signal (in Hz)
+        - `N `(int): Length of the signal
 
-        Return:
-        -------
-        frequencies(np.ndarray): 1D array of frequencies ranging from 0 to the Nyquist frequency by Fs/2 step.
+        Returns:
+        -----------
+        - `frequencies` (np.ndarray): 1D array of frequencies ranging from 0 to the Nyquist frequency by Fs/2 step.
     """
     # Calculate the frequency resolution
     freq_resolution = Fs / N
@@ -824,21 +913,21 @@ def create_positive_frequency_vector(Fs: int, N: int) -> np.ndarray:
     return frequencies
 
 
-def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
+def compute_signal_time_dsps(signal: np.ndarray, sample_rate: Union[float, int]) -> Tuple[dict, dict, dict, dict]:
     """
     Computes the PSD of a signal using 3 different methods (via FFT, via Scipy's periodogram and welch functions).
 
     Parameters:
-    ----------
-        signal (np.ndarray): 1D array of amplitudes
-        sample_rate (int): sampling rate of the signal
+    -----------
+        - `signal` (np.ndarray): 1D array of amplitudes
+        - `sample_rate` (float,int): sampling rate of the signal
 
-    Return:
-    -------
-        time_signal (dict): Dictionary containing signal's timepoints and amplitudes as ndarray under key1 "time_vector" and key2 "amplitudes".
-        PSD_fft (dict) : Dictionary containing signal's DSP results computed via FFT: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
-        PSD_p (dict) : Dictionary containing signal's DSP results computed via periodogram: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
-        PSD_w (dict) : Dictionary containing signal's DSP results computed via welch: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
+    Returns:
+    -----------
+        - `time_signal` (dict): Dictionary containing signal's timepoints and amplitudes as ndarray under key1 "time_vector" and key2 "amplitudes".
+        - `PSD_fft` (dict) : Dictionary containing signal's DSP results computed via FFT: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
+        - `PSD_p` (dict) : Dictionary containing signal's DSP results computed via periodogram: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
+        - `PSD_w` (dict) : Dictionary containing signal's DSP results computed via welch: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
     """
     N = len(signal)
     print("N: ", N)
@@ -871,10 +960,10 @@ def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
 
     # compute PSD via periodogram
     freq1, Pxx_density1 = periodogram(
-        signal,  fs=sample_rate, window=boxcar(N), detrend=False)
+        signal,  fs=sample_rate, window=boxcar(N), detrend=False)  # type: ignore
     # print(type(psd_from_periodogram))
     freq2, Pxx_density2 = welch(signal, fs=sample_rate, window=hamming(1000),
-                                nperseg=1000, noverlap=500, nfft=N, detrend=False,
+                                nperseg=1000, noverlap=500, nfft=N, detrend=False,  # type: ignore
                                 axis=0)
 
     # create dictionaries of frequencies with psd results for each method to return
@@ -885,20 +974,23 @@ def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
     return time_signal, PSD_fft, PSD_p, PSD_w
 
 
-def add_inset_zoom(ax: plt.Axes, x_data, y_data: np.ndarray, zoom_region: tuple):
+def add_inset_zoom(ax: plt.Axes, x_data: tuple, y_data: tuple, zoom_region: tuple):
     """
     Add a child inset axes plot to the given Axes object. Can show multiple overlapping series.
-    The child inset axes object inherits the line style of the parent plot.
+    The child inset axes object inherits the line style of the parent plot `ax`.
 
     Parameters:
-        ax (matplotlib.axes.Axes): The axes object to add the inset zoom to.
-        x_data (tuple of 1D array or array-like): x-coordinates of the data points.
-        y_data (tuple of 1D array or array-like): y-coordinates of the data points.
+    -----------
+        - `ax` (plt.Axes): The axes object to add the inset zoom to.
+        - `x_data` (tuple of 1D array or array-like): x-coordinates of the data points.
+        - `y_data` (tuple of 1D array or array-like): y-coordinates of the data points.
             If a single array is provided, it represents a single series.
             If a tuple of arrays is provided, array represents a separate series.
-        zoom_region (tuple): The region to be shown in the zoomed inset in the format (x1, x2, y1, y2).
+        - `zoom_region` (tuple): The region to be shown in the zoomed inset in the format (x1, x2, y1, y2).
 
-    Returns: axins object
+    Returns: 
+    -----------
+        - axins object
     """
     # axins = zoomed_inset_axes(ax, zoom=zoom_factor, loc='upper right')
     axins = inset_axes(ax, width=2, height=0.7, loc='upper right')
@@ -927,30 +1019,30 @@ def add_inset_zoom(ax: plt.Axes, x_data, y_data: np.ndarray, zoom_region: tuple)
     axins.grid(visible=True, linestyle='--', linewidth=0.5)
 
 
-def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int, fig_title: str, external_results: Optional[str] = None):
+def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: Union[float, int], fig_title: str, external_results: Optional[str] = None):
     """
     Plots a single time signal alongside its 3 PSDs.
 
     Calls compute_signal_time_dsps() and plots the results as figure of 4 subplots (lines).
-    If external_results specified, calls import_psd_results2() to superimpose the external results to each corresponding PSD subplot and add an inset zoom to check differences.
+    If `external_results` specified, calls `import_psd_results2() `to superimpose the external results to each corresponding PSD subplot and add an inset zoom to check differences.
 
-    Returns 2 dictionaries (psd_python_results, psd_matlab_results), each containing the PSD results (from fft,periodogram,welch) of the desired signal.
+    Returns a dictionary `psd_results` containing two dictionaries (`psd_python_results`, `psd_matlab_results`), each containing the PSD results (from fft,periodogram,welch) of the desired signal.
         For both, results are stored under respective keys (key1,key2,key3)=("PSD_FFT","PSD_P","PSD_W")
 
     Parameters:
     ----------
-        fig_number (int): Number of the figure.
-        signal (np.ndarray): 1D array of amplitudes.
-        sample_rate (int): sampling rate (in Hz).
-        fig_title (str): Title of the figure.
-        external_results (str): external psd results filename with extension.csv (cf function import_psd_results2()).
-            External results must be an array of 6 columns arranged by two, as 3*(frequenceies,psds), for each PSD calculation method.
+        - `fig_number` (int): Number of the figure.
+        - `signal` (np.ndarray): 1D array of amplitudes.
+        - `sample_rate` (float,int): sampling rate (in Hz).
+        - `fig_title` (str): Title of the figure.
+        - `external_results` (str): external psd results filename with extension.csv (cf function import_psd_results2()).
+            - External results must be an array of 6 columns arranged by two, as 3*(frequenceies,psds), for each PSD calculation method.
 
-    Return:
+    Returns:
     ----------
-        psd_results (dict) : Dictionary of two key:value pairs containing a signal's DSP results (FFT,periodogram,welch).
-            key1:"Python_PSD_results"; value1: Dictionary of results from 'compute_signal_time_dsps()' function
-            key2:"Matlab_PSD_results"; value1: Dictionary of results from 'import_psd_results2() function
+        `psd_results` (dict) : Dictionary of two key:value pairs containing a signal's DSP results (FFT,periodogram,welch).
+            key1:"Python_PSD_results"; value1: Dictionary of results from `compute_signal_time_dsps()` function
+            key2:"Matlab_PSD_results"; value1: Dictionary of results from `import_psd_results2()` function
     """
     # compute the PSDs of a signal using 3 different methods
     time_signal, PSD_fft, PSD_p, PSD_w = compute_signal_time_dsps(
@@ -1145,7 +1237,7 @@ def compute_average_ratio_for_event_on_blocks_for_all_electrodes(mat3d):
 # =============================================================================
 
 
-def get_segment_coordinates2(reference_index: int, segment_time_length, sample_rate):
+def get_segment_coordinates2(reference_index: int, segment_time_length, sample_rate) -> dict:
     """
     Gets the coordinates of segments of specified time length on each side of a reference index.
 
@@ -1156,14 +1248,14 @@ def get_segment_coordinates2(reference_index: int, segment_time_length, sample_r
         ie:1s before the marker and 1s after the marker.
 
     Parameters:
-    -----
-        reference_index (int): sample index used as reference to define a segment
-        segment_time_length (int): expressed in seconds
-        sample_rate (int): Sample rate
+    -----------
+        - `reference_index` (int): sample index used as reference to define a segment
+        - `segment_time_length` (int): expressed in seconds
+        - `sample_rate` (int): Sample rate
 
     Returns:
-    ------
-        segments_coordinates (dict): coordinates of the segments as indexes
+    -----------
+        - `segments_coordinates` (dict): coordinates of the segments as indexes
             key1:"reference_end"
             key2:"lower_end"
             key3: "higher_end"
@@ -1182,21 +1274,21 @@ def get_segment_coordinates2(reference_index: int, segment_time_length, sample_r
     return segments_coordinates
 
 
-def get_signal_segement2(signal: np.ndarray, lower_end: int, higher_end: int):
+def get_signal_segement2(signal: np.ndarray, lower_end: int, higher_end: int) -> Tuple[np.ndarray, int]:
     """
     Get a segment of a given signal.
         The segment to extract is defined by its coordinates (lower_end,higher_end) expressed as the corresponding indexes of the signal array.
-            Note: array slicing already takes into account python [lower_end,higher_end+1]
+            Note: array slicing already takes into account python [`lower_end`,`higher_end`+1]
 
     Parameters:
-    ------
-        lower_end (int): index of the lower end of the segment
-        higher_end (int): index of the higher end of the segment
+    -----------
+        - `lower_end` (int): index of the lower end of the segment
+        - `higher_end` (int): index of the higher end of the segment
 
     Retruns:
-    ------
-        signal_segment (np.ndarray): signal segment data
-        signal_length (int): length of original segment
+    -----------
+        - `signal_segment` (np.ndarray): signal segment data
+        - `signal_length` (int): length of original segment
     """
     signal_length = len(signal)
     signal_segment = signal[lower_end:(higher_end+1)]  # cf python slicing
@@ -1204,30 +1296,31 @@ def get_signal_segement2(signal: np.ndarray, lower_end: int, higher_end: int):
     return signal_segment, signal_length
 
 
-def extract_data_epochs(signal: np.ndarray, sample_rate: float, markers_labels_times: dict, select_events: tuple, epoch_limits: tuple[float, float]):
+def extract_data_epochs(signal: np.ndarray, sample_rate: float, markers_labels_times: dict,
+                        select_events: tuple, epoch_limits: tuple[float, float]) -> dict:
     """
     Extract epochs from a signal.
 
-    Parameters
-    ---------
-        `signal` (np.array): 1D array of samples
-        `srate` (float): sampling rate of the signal
-        `marker_labels_times` (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
-        `select_events` (tuple): tuple of selected event types ex (111,100)
-        `epoch_limits` (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
+    Parameters:
+    -----------
+        - `signal` (np.array): 1D array of samples
+        - `srate` (float): sampling rate of the signal
+        - `marker_labels_times` (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        - `select_events` (tuple): tuple of selected event types ex (111,100)
+        - `epoch_limits` (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
             ex1: (0,4) - From 0 sec before to 4 sec after the time-locking event.
             ex2: (1,2) - From 1 sec before to 2 sec after the time-locking event.
             ex3: (-1,2) - From 1 sec before to 2 sec after the time-locking event.
 
 
-    Returns
-    --------
-        `epoched_signals` (dict): Dictionary of epoched signals for each marker type
+    Returns:
+    -----------
+        - `epoched_signals` (dict): Dictionary of epoched signals for each marker type
             Keys (str): "label_markertype"
             values (np.ndarray): 2D array of signal data epochs arranged as a column per event
 
     Examples:
-    ----------
+    -----------
     ## Create a 1D array of signals
 
     ### Define the sample rate and duration
@@ -1293,7 +1386,7 @@ def extract_data_epochs(signal: np.ndarray, sample_rate: float, markers_labels_t
                 print(
                     f"first_seg_coord: {first_seg_coord} - second_seg_coord: {second_seg_coord}")
                 # extract the segments and list them
-                signal_segment, _ = get_signal_segement2(
+                signal_segment, signal_len = get_signal_segement2(
                     signal=signal, lower_end=first_seg_coord, higher_end=second_seg_coord)
                 time_segment = signal_times[first_seg_coord:second_seg_coord+1]
                 signal_segments.append(signal_segment)
@@ -1310,22 +1403,22 @@ def extract_data_epochs(signal: np.ndarray, sample_rate: float, markers_labels_t
     return epoched_signals
 
 
-def compute_welch_estimation_on_segment2(segment: np.ndarray, sample_rate: float, nfft: Optional[int] = None):
+def compute_welch_estimation_on_segment2(segment: np.ndarray, sample_rate: float, nfft: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute PSD using welch method on a segment.
         Relies on the scipy.welch function, which is parametered to divide the given signal into 4 segments, and use an overlap of 50%
-        For given signal of length N (samples), the frequency resolution will be Fr=Sample_rate/(N/4). For Fr=Fe/N, argument nfft=N must be specified .
+        For given signal of length N (samples), the frequency resolution will be Fr=Sample_rate/(N/4). For Fr=Fe/N, argument `nfft`=N must be specified .
 
     Parameters:
-    ------
-        segment (np.ndarray): samples of signal. 
-        sample_rate (float) : sampling rate
-        nfft (int): Length of the FFT used, for zero padding welch.
+    -----------
+        - `segment` (np.ndarray): samples of signal. 
+        - `sample_rate` (float) : sampling rate
+        - `nfft` (int): Length of the FFT used, for zero padding welch.
 
     Retruns:
-    ------
-        freqs (np.ndarray): array of welch frequencies.
-        Pxx_density (np.ndarray): array of welch power densities.
+    -----------
+        - `freqs` (np.ndarray): array of welch frequencies.
+        - `Pxx_density` (np.ndarray): array of welch power densities.
     """
 
     segment_length = segment.shape[0]  # number of points in the segment
@@ -1341,24 +1434,24 @@ def compute_welch_estimation_on_segment2(segment: np.ndarray, sample_rate: float
     print(f"nfft: {nfft}")
     freqs, Pxx_density = welch(segment, fs=sample_rate,
                                window="hann", nperseg=sub_segment_length,
-                               detrend=False, nfft=nfft,
+                               detrend=False, nfft=nfft,  # type: ignore
                                noverlap=sub_segment_length//2, axis=0)
     return freqs, Pxx_density
 
 
-def compute_psds_for_each_epoch(epochs: np.ndarray, sample_rate: float, nfft: Optional[int] = None):
+def compute_psds_for_each_epoch(epochs: np.ndarray, sample_rate: float, nfft: Optional[int] = None) -> dict:
     """
     Computes the the PSD of multiple signal epochs.
 
-    Parameters
+    Parameters:
     ----------
-        epochs (np.ndarray): 2D array of signals, each column represents a signal
-        sample_rate (float): Sampling rate of the signals
-        nfft (int): Length of the FFT used, for zero padding welch
+        - `epochs` (np.ndarray): 2D array of signals, each column represents a signal
+        - `sample_rate` (float): Sampling rate of the signals
+        - `nfft` (int): Length of the FFT used, for zero padding welch
 
-    Returns
+    Returns:
     ----------
-        psd_results_all_epochs (dict): Dictionary of PSD estimation results:
+        - `psd_results_all_epochs` (dict): Dictionary of PSD estimation results:
             "PSD_frequencies": 2D array of frequency results, each column corresponds to a signal\n
             "PSD_magnitudes" : 2D array of PSD magnitudes results, each column corresponds to a signal\n
     """
@@ -1380,20 +1473,20 @@ def compute_psds_for_each_epoch(epochs: np.ndarray, sample_rate: float, nfft: Op
     return psd_results_all_epochs
 
 
-def compute_averaged_psds_over_trials(trials: np.ndarray, sample_rate: float, nfft: Optional[int] = None):
+def compute_averaged_psds_over_trials(trials: np.ndarray, sample_rate: float, nfft: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
     """
     Computes the the PSD of several sample trials and averages their results.
 
-    Parameters
+    Parameters:
     ----------
-        trials (np.ndarray): 2D array of trials where each column represents the signal of a trial
-        sample_rate (float): Sampling rate of the signal
-        nfft (int): Length of the FFT used, for zero padding welch
+        - `trials` (np.ndarray): 2D array of trials where each column represents the signal of a trial
+        - `sample_rate` (float): Sampling rate of the signal
+        - `nfft` (int): Length of the FFT used, for zero padding welch
 
-    Returns
+    Returns:
     ----------
-        mean_frequencies (np.ndarray): 1D array of PSD estimation frequency results
-        mean_pxx_densities (np.ndarray): 1D array of averaged PSD estimation power results
+        - `mean_frequencies` (np.ndarray): 1D array of PSD estimation frequency results
+        - `mean_pxx_densities` (np.ndarray): 1D array of averaged PSD estimation power results
     """
     psd_results_all_epochs = compute_psds_for_each_epoch(
         epochs=trials, sample_rate=sample_rate, nfft=nfft)
@@ -1411,17 +1504,18 @@ def compute_averaged_psds_over_trials(trials: np.ndarray, sample_rate: float, nf
 def signal_comparison(signal_1: np.ndarray, signal_2: np.ndarray, sample_rate: float, labels: tuple[str, str]):
     """
     Displays two time signals and their respective PSD estimation using welch method.
-        To compute the PSD estimates, 'compute_psds_for_each_epoch()' is called.
+        To compute the PSD estimates, `compute_psds_for_each_epoch()` is called.
 
     Parameters:
     ----------
-        signal_1 (np.ndarray): 2D array with col_1:times,col_2=samples\n
-        signal_2 (np.ndarray): 2D array with col_1:times,col_2=samples\n
-        sample_rate (float): signals sampling rate\n
-        labels (tuple): length 2 tuple of signals labels (label_signal_1,label_signal_2)\n
+        - `signal_1` (np.ndarray): 2D array with col_1:times,col_2=samples
+        - `signal_2` (np.ndarray): 2D array with col_1:times,col_2=samples
+        - `sample_rate` (float): signals sampling rate
+        - `labels` (tuple): length 2 tuple of signals labels (label_signal_1,label_signal_2)
     Returns:
     ----------
-    nothing
+        - `None` (bool): This function does not return a value. It shows a figure.
+
     """
     signals_to_compare = np.column_stack((signal_1[:, 1], signal_2[:, 1]))
     print(f"signals to compare shape - {signals_to_compare.shape}")
@@ -1453,30 +1547,32 @@ def signal_comparison(signal_1: np.ndarray, signal_2: np.ndarray, sample_rate: f
     plt.show()
 
 
-def compute_welch_on_a_signal_before_each_marker(signal: np.ndarray, sample_rate: float, markers_array: np.ndarray, segment_duration: float, nfft: Optional[int] = None):
+def compute_welch_on_a_signal_before_each_marker(signal: np.ndarray, sample_rate: float, markers_array: np.ndarray,
+                                                 segment_duration: float, nfft: Optional[int] = None) -> dict:
     """
     Computes the DSP estimations of all segments of a signal.
 
     The signal has as many segments as it has of markers. Each segment streches over the specified segment duration and ends at a marker.
     The DSPs are then computed BEFORE each marker
 
-    Note: 
-        Uses the markers_array indexes to define the segments.
-
-    For opposite operation, see the complementary function 'compute_welch_on_a_signal_after_each_marker()'.
+    Notes: 
+    -----------
+        - Uses the `markers_array` indexes to define the segments.
+        - For opposite operation, see the complementary function `compute_welch_on_a_signal_after_each_marker()`.
 
 
     Parameters:
-    ------
-        signal (np.ndarray): 1D array of signal samples.
-        sample_rate (float) : Signal sampling rate.
-        markers_array (dict): Dictionary of 2D arrays under 3 keys as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
-        segment_duration (float): length of the segment on which to compute the DSP estimation.
+    -----------
+        - `signal` (np.ndarray): 1D array of signal samples.
+        - `sample_rate` (float) : Signal sampling rate.
+        - `markers_array` (dict): Dictionary of 2D arrays under 3 keys as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        - `segment_duration` (float): length of the segment on which to compute the DSP estimation.
 
     Retruns:
-    ------
-        freqs (np.ndarray): array of welch frequencies.
-        Pxx_density (np.ndarray): array of welch power densities.
+    -----------
+        - `results` (dict): Dictionary of PSD estimation results:
+            - "freqs" (np.ndarray): array of welch frequencies.
+            - "Pxx_density" (np.ndarray): array of welch power densities.
     """
     N = len(signal)
     freqs_for_all_markers = []
@@ -1502,29 +1598,31 @@ def compute_welch_on_a_signal_before_each_marker(signal: np.ndarray, sample_rate
     return {"PSD_frequencies": freqs_for_all_markers, "PSD_magnitudes": PSDs_for_all_markers}
 
 
-def compute_welch_on_a_signal_after_each_marker(signal: np.ndarray, sample_rate: float, markers_array: np.ndarray, segment_duration: float, nfft: Optional[int] = None):
+def compute_welch_on_a_signal_after_each_marker(signal: np.ndarray, sample_rate: float, markers_array: np.ndarray,
+                                                segment_duration: float, nfft: Optional[int] = None) -> dict:
     """
     Computes the DSP estimations of all segments of a signal.
 
     The signal has as many segments as it has of markers. Each segment starts at a marker and streches over the specified segment duration.
     The DSPs are then computed AFTER each marker
 
-    Note: 
-        Uses the markers_array indexes to define the segments.
-
-    For opposite operation, see the complementary function 'compute_welch_on_a_signal_before_each_marker()'.
+    Notes: 
+    -----------
+        - Uses the `markers_array` indexes to define the segments.
+        - For opposite operation, see the complementary function `compute_welch_on_a_signal_before_each_marker()`.
 
     Parameters:
-    ------
-        signal (np.ndarray): 1D array of signal samples.
-        sample_rate (float) : Signal sampling rate.
-        markers_array (dict): Dictionary of 2D arrays under 3 keys as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
-        segment_duration (float): length of the segment on which to compute the DSP estimation.
+    -----------
+        - `signal` (np.ndarray): 1D array of signal samples.
+        - `sample_rate` (float) : Signal sampling rate.
+        - `markers_array` (dict): Dictionary of 2D arrays under 3 keys as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        - `segment_duration` (float): length of the segment on which to compute the DSP estimation.
 
     Retruns:
-    ------
-        freqs (np.ndarray): array of welch frequencies.
-        Pxx_density (np.ndarray): array of welch power densities.
+    -----------
+        - `results` (dict): Dictionary of PSD estimation results:
+            - "freqs" (np.ndarray): array of welch frequencies.
+            - "Pxx_density" (np.ndarray): array of welch power densities.
     """
 
     N = len(signal)
@@ -1562,7 +1660,7 @@ def extract_data_epochs_from_all_signals(signals: np.ndarray[Any, np.dtype[Union
     Parameters:
     -----------
         - `signals` (np.ndarray): 2D array of signals where each signal represents a column (axis=1)
-        - `sample_rate` (Union[float, int]): Signal sampling rate
+        - `sample_rate` (float, int): Signal sampling rate
         - `markers_labels_times` (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
         - `epoch_limits` (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
 
@@ -1633,7 +1731,7 @@ def extract_data_epochs_from_all_signals(signals: np.ndarray[Any, np.dtype[Union
     return epoched_signals
 
 
-def compute_psds_for_each_epoch_all_signals(input_dict: dict, sample_rate: Union[float, int], nfft: Optional[Union[float, int]] = None):
+def compute_psds_for_each_epoch_all_signals(input_dict: dict, sample_rate: Union[float, int], nfft: Optional[int] = None) -> dict:
     """
     Computes the PSDs of each epoch for all signals
 
@@ -1709,48 +1807,50 @@ def compute_psds_for_each_epoch_all_signals(input_dict: dict, sample_rate: Union
 # =============================================================================
 ############################# Signal preprocessing  ###########################
 # =============================================================================
-def detrend_signals(raw_signals: np.ndarray):
+def detrend_signals(raw_signals: np.ndarray) -> np.ndarray:
     """
-    Remove linear trends from signals.
+    Remove linear trends from multiple signals.
+        Computes the mean of each signal, and substract its mean to each signal
 
-    Parameters
-    ----------
-    raw_signals : ndarray
-        Array of raw signals arranged as columns.
+    Parameters:
+    -----------
+        - `raw_signals` (np.ndarray): 2D Array of raw signals arranged as columns.
 
-    Returns
-    ----------
-    EEG_amplitudes_centered : ndarray
-        Array of detrended signals arranged as columns (same shape as raw_signals).
+    Returns:
+    -----------
+        - `EEG_amplitudes_centered` (np.ndarray): Array of detrended signals arranged as columns (same shape as raw_signals).
     """
+
     print(f"input_signals shape:\n {raw_signals.shape}")
     print(f"input_signals mean per signal:\n {np.mean(raw_signals,axis=0)}")
     EEG_amplitudes_centered = raw_signals-np.mean(raw_signals, axis=0)
     return EEG_amplitudes_centered
 
 
-def rereference_signals(input_signals: np.ndarray):
+def rereference_signals(input_signals: np.ndarray) -> np.ndarray:
     """
-    Reference signals to average.
+    Reference multiple signals to average of all signals(Average rereference).
+        Computes the whole mean of signals at each times, and substract its mean to each signal
 
-    Parameters
-    ----------
-    input_signals : ndarray
-        Array of signals arranged as columns.
 
-    Returns
-    ----------
-    EEG_amplitudes_rereferenced : ndarray
-        Array of signals arranged as columns (same shape as input_signals).
+    Parameters:
+    -----------
+        - `input_signals` (np.ndarray): Array of signals arranged as columns.
+
+    Returns:
+    -----------
+        - `EEG_amplitudes_rereferenced` (np.ndarray):  Array of signals arranged as columns (shape identical to input_signals).
     """
     print(f"input_signals shape:{input_signals.shape}")
     print(f"input_signals whole mean:{np.mean(input_signals)}")
-    EEG_amplitudes_rereferenced = input_signals-np.mean(input_signals)
+    mean_vector = np.mean(input_signals)
+    print(f"mean_vector shape: {mean_vector.shape}")
+    EEG_amplitudes_rereferenced = input_signals-mean_vector
 
     return EEG_amplitudes_rereferenced
 
 
-def filter_signal(input_signals: np.ndarray[Any, np.dtype[Union[np.float32, np.float64, np.int32]]], sample_rate: Union[int, float], order: int,
+def filter_signal(input_signals: np.ndarray, sample_rate: Union[int, float], order: int,
                   cutofffreq: Union[Tuple[float, float, float], Tuple[float, float]]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Applies a series of filters on signals.
@@ -1758,36 +1858,32 @@ def filter_signal(input_signals: np.ndarray[Any, np.dtype[Union[np.float32, np.f
 
     Parameters:
     -----------
-    input_signals : ndarray
-        Array of signals arranged as columns.
-    sample_rate : int
-        Sampling rate of the signals.
-    order : int
-        Order of the band pass filter. Also required to apply right correction to cutofffreq[0,2]
-    cutofffreq : tuple
-        Cutoff frequencies to be used by filters. 
-        Tuple must be len(cutofffreq) = 2 or 3.
-        Ordered as: cutofffreq=(low_cutoff_freq,low_cutoff_freq,notch_cutoff_freq)
-
+        - `input_signals` (np.ndarray): 2D Array of signals arranged as columns.
+        - `sample_rate` (int): Sampling rate of the signals.
+        - `order` (int) : Order of the band pass filter. Also required to apply right correction to cutofffreq[0,2]
+        - `cutofffreq` (tuple): Cutoff frequencies to be used by filters. 
+            - Tuple must be len(cutofffreq) = 2 or 3.
+            - Ordered as: `cutofffreq` =(`low_cutoff_freq`,`low_cutoff_freq`,`notch_cutoff_freq`)
 
     Returns:
     -----------
-    EEG_Filtered_NOTCH_BP : ndarray
-        Array of signals arranged as columns (same shape as input_signals).
-    freq_test_BP : ndarray
-        Frequency vector for verification of the filter response.
-    magnitude_test_BP : ndarray
-        magnitude vector for verification of the filter response.
+        - `EEG_Filtered_NOTCH_BP` (ndarray): Array of signals arranged as columns (same shape as input_signals).
+        - `freq_test_BP` (ndarray): Frequency vector for verification of the filter response.
+        - `magnitude_test_BP` (ndarray): Magnitude vector for verification of the filter response.
     """
     if len(cutofffreq) < 2 or len(cutofffreq) > 3:
         raise ValueError(
             f"cutofffreq tuple length:{len(cutofffreq)} - Input tuple length must be between 2 and 3")
-    try:
+    else:
+        LOW_CUTOFF_FREQ_THEORETICAL = 1
+        HIGH_CUTOFF_FREQ_THEORETICAL = 1
         if len(cutofffreq) == 3:
             LOW_CUTOFF_FREQ_THEORETICAL, HIGH_CUTOFF_FREQ_THEORETICAL, NOTCH_CUTOFF_FREQ = cutofffreq
+
         elif len(cutofffreq) == 2:
             LOW_CUTOFF_FREQ_THEORETICAL, HIGH_CUTOFF_FREQ_THEORETICAL = cutofffreq
             NOTCH_CUTOFF_FREQ = None
+
         # cutoff frequency correction for filtfilt application
         LOW_CUTOFF_FREQ_CORRECTED = filtfilt_cutoff_frequency_corrector(
             order, LOW_CUTOFF_FREQ_THEORETICAL, sample_rate, pass_type="high_pass")
@@ -1822,9 +1918,6 @@ def filter_signal(input_signals: np.ndarray[Any, np.dtype[Union[np.float32, np.f
                                                                                   high_cutoff_freq=HIGH_CUTOFF_FREQ_CORRECTED,
                                                                                   filter_order=order)
         print("Filtered signal shape:", np.shape(EEG_Filtered_NOTCH_BP))
-    except UnboundLocalError:
-        print(
-            f"Specified cutofffreq={cutofffreq} - The tuple must contain only 2 or 3 elements as (low_cutoff_freq,high_cutoff_freq,notch_cutoff_freq)")
     return EEG_Filtered_NOTCH_BP, freq_test_BP, magnitude_test_BP
 
 # =============================================================================
@@ -1887,19 +1980,19 @@ def compute_total_acceleration(accelerations_array: np.ndarray) -> np.ndarray:
 # =============================================================================
 
 
-def rms(series1, series2, name: str, units: str = "Units (NA)"):  # litteral formula
+def rms(series1, series2, name: str, units: str = "Units (NA)") -> float:  # litteral formula
     """
     Compute the root mean squared error of two series.
     Returns the value and prints it
 
     Parameters:
     ----------
-        series1 (np.ndarray): 1D series to compare
-        series2 (np.ndarray): 1D series to compare
+        - `series1` (np.ndarray): 1D series to compare
+        - `series2` (np.ndarray): 1D series to compare
 
     Returns:
     ----------
-        rms (float): root mean squared error of two series
+        - `rms` (float): root mean squared error of two series
     """
     # rms=np.sqrt(((python - matlab) ** 2).mean())
 
@@ -1911,19 +2004,20 @@ def rms(series1, series2, name: str, units: str = "Units (NA)"):  # litteral for
     return rms
 
 
-def cv_percent(series1, series2):
+def cv_percent(series1: np.ndarray, series2: np.ndarray) -> np.ndarray:
     """
-    [UNUSED]Compute coeffcient of variation (CV) of two series.
+    [UNUSED]
+    Compute coeffcient of variation (CV) of two series.
     Returns the result expressed in (%)
 
     Parameters:
     ----------
-        series1 (np.ndarray): 1D series to compare
-        series2 (np.ndarray): 1D series to compare
+        - `series1` (np.ndarray): 1D series to compare
+        - `series2` (np.ndarray): 1D series to compare
 
     Returns:
     ----------
-        cv (float): coeffcient of variation  of two series
+        - `cv` (np.ndarray): coeffcient of variation  of two series
     """
     diff = series1-series2
     # diff=np.std([series1,series2])
@@ -1935,42 +2029,43 @@ def cv_percent(series1, series2):
     return cv
 
 
-def abs_distance(series1, series2):
+def abs_distance(series1, series2) -> np.ndarray:
     """
     Compute the absolute differences of two series elementwise.
     Returns a series of absolute differences.
 
     Parameters:
     ----------
-        series1 (np.ndarray): 1D series to compare
-        series2 (np.ndarray): 1D series to compare
+        - `series1` (np.ndarray): 1D series to compare
+        - `series2` (np.ndarray): 1D series to compare
 
     Returns:
     ----------
-        absolute_diff (np.ndarray): array of absolute differences.
+        - `absolute_diff` (np.ndarray): array of absolute differences.
     """
     diff = series1-series2
     absolute_diff = abs(diff)
     return (absolute_diff)
 
 
-def list_matlab_psd_results_filenames(input_signal_filename: str, channels_dict: dict[str], selected_channel_numbers: list[int]):
+def list_matlab_psd_results_filenames(input_signal_filename: str, channels_dict: dict[str, str], selected_channel_numbers: np.ndarray) -> list:
     """
     Lists the expected csv filenames of the matlab psd results for the selected channels.
 
     Parameters:
     ----------
-        input_signal_filename (str): name of the input eeg data file (with its csv extension)
-        channels_dict (dict): Dictionary of channel numbers as keys (ie Channel_x ) and names as values (ie C3)
-        selected_channel_numbers (list): List of the selected channel numbers (integers)
+        - `input_signal_filename` (str): name of the input eeg data file (with its csv extension)
+        - `channels_dict` (dict): Dictionary of channel numbers as keys (ie Channel_x ) and names as values (ie C3)
+        - `selected_channel_numbers` (np.ndarray): 1D array of the selected channel numbers (integers)
 
     Returns:
     ----------
-        matlab_results_filename_list(list): dictionary of the frequencies and PSDs estimates from matlabs FFT
-        PSD_p_results (dict): dictionary of the frequencies and PSDs estimates from matlabs periodogram function
-        PSD_w_results (dict): dictionary of the frequencies and PSDs estimates from matlabs welch function
+        -`matlab_results_filename_list` (list): dictionary of the frequencies and PSDs estimates from matlabs FFT
+
     """
     matlab_results_filename_list = []
+    # channel_indexes = [x - 1 for x in selected_channel_numbers]
+    # old bug fix?
     channel_indexes = selected_channel_numbers-1
     print("selected channels :")
     for (i, y) in zip(selected_channel_numbers, channel_indexes):
@@ -1988,24 +2083,23 @@ def list_matlab_psd_results_filenames(input_signal_filename: str, channels_dict:
     return matlab_results_filename_list
 
 
-def import_psd_results2(psd_results_file_name: str):
+def import_psd_results2(psd_results_file_name: str) -> Tuple[dict, dict, dict]:
     """
     Imports psd data results generated (beforehand) by the matlab script.
     Matlab psd results must be stored in the `STAGE_SIGNAL_PHYSIO/DAT/OUTPUT/Matlab_PSD_Results` folder as csv files to be retrieved.
-
         Returns 3 dictionaries (for each PSD estimation method) of two key-value pairs : 
-        (key1:"frequencies", value:(1D)array of frequencies) \n
-        (key2:"psds", value: (1D)array of PSD)
+            (key1:"frequencies", value:(1D)array of frequencies)\n
+            (key2:"psds", value: (1D)array of PSD)
 
     Parameters:
     ----------
-        psd_results_file_name (str) :name of the input eeg data file (with its extension)
+        - `psd_results_file_name` (str) :name of the input eeg data file (with its extension)
 
     Returns:
     ----------
-        PSD_fft_results (dict): dictionary of the frequencies and PSDs estimates from matlabs FFT
-        PSD_p_results (dict): dictionary of the frequencies and PSDs estimates from matlabs periodogram function
-        PSD_w_results (dict): dictionary of the frequencies and PSDs estimates from matlabs welch function
+        - `PSD_fft_results` (dict): dictionary of the frequencies and PSDs estimates from matlabs FFT
+        - `PSD_p_results` (dict): dictionary of the frequencies and PSDs estimates from matlabs periodogram function
+        - `PSD_w_results` (dict): dictionary of the frequencies and PSDs estimates from matlabs welch function
 
     """
     # filename="MATLAB_PSD_res_EEG_Channel_5_C3_001_MolLud_20201112_1_c_preprocessed_499.998_Hz"
@@ -2025,17 +2119,18 @@ def import_psd_results2(psd_results_file_name: str):
     return PSD_fft_results, PSD_p_results, PSD_w_results
 
 
-def export_xdf_eeg_to_csv(xdf_filepath: str, PROCESS_SIGNAL: bool = False):
+def export_xdf_eeg_to_csv(xdf_filepath: str, PROCESS_SIGNAL: bool = False) -> str:
     """
     Access the xdf file, finds eeg stream and exports all channels data to csv.
+
     Parameters:
     ----------
-        xdf_filepath (str): filepath to the xdf file.
-        PROCESS_SIGNAL (bool): boolean to specify if xdf data must be preprocessed or not before export
+        - `xdf_filepath` (str): filepath to the xdf file.
+        - `PROCESS_SIGNAL` (bool): boolean to specify if xdf data must be preprocessed or not before export
 
     Returns:
     ----------
-         exportfilename (str): filename of the exported file
+         - `exportfilename` (str): filename of the exported file
     """
     # import raw data
 
