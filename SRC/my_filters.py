@@ -2,6 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
+from matplotlib.axes._axes import Axes
 from typing import Optional, Union, Literal, Tuple, List, Any
 # library for creating filters
 from scipy.signal import butter, iirnotch, filtfilt, welch, freqz, freqs, TransferFunction
@@ -52,7 +53,7 @@ def filtfilt_cutoff_frequency_corrector(order: int, cutoff_freq: Union[float, in
 
 
 def plot_filter_frequency_response(fig_title: str, frequencies: np.ndarray, magnitude: np.ndarray, order: int,
-                                   fc1: Union[float, int], fc2: Optional[Union[float, int]] = None, fig_number: Optional[int] = None) -> Figure:
+                                   fc1: Union[float, int], fc2: Optional[Union[float, int]] = None, fig_number: Optional[int] = None) -> Axes:
     """
     Plots the frequency response of the chosen filter.
 
@@ -91,7 +92,7 @@ def plot_filter_frequency_response(fig_title: str, frequencies: np.ndarray, magn
     # axis.set_ylim([-25, 10])
     plt.legend()
 
-    return figure
+    return axis
 
 
 def low_pass_filter(sample_rate: Union[float, int], cutoff_freq: Union[float, int],

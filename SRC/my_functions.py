@@ -103,7 +103,7 @@ def save_figures_to_pdf_single_per_page(pdf_filename: str, figures_list: list) -
     pdf_file.close()
 
 
-def save_figures_to_pdf_multiple_per_page(figures: List[matplotlib.figure.Figure], filename: str, rows_per_page: int = 2) -> None:
+def save_figures_to_pdf_multiple_per_page(figures: List[Figure], filename: str, rows_per_page: int = 2) -> None:
     """
     Save a list of Matplotlib figures to a PDF file with control over the number of
     rows of figures per page.
@@ -132,7 +132,7 @@ def save_figures_to_pdf_multiple_per_page(figures: List[matplotlib.figure.Figure
                 figure_index = page_num * rows_per_page + row
                 if figure_index < total_figures:
                     figure = figures[figure_index]
-                    axs[row].imshow(figure.canvas.renderer.buffer_rgba())
+                    axs[row].imshow(figure.canvas.renderer.buffer_rgba()) # type: ignore
                     axs[row].axis('off')
 
             plt.tight_layout()
@@ -595,6 +595,7 @@ def annotate_local_extrema(x: np.ndarray, y: np.ndarray, axis: plt.Axes, order: 
         - `axis`: parent plot on which annotation will be added
         - `order`: Number of neighboor points to consider for comparison
         - `window-size` (int): number of points used for computing the moving average of the distribution
+
     Returns:
     ----------
     """
@@ -608,13 +609,13 @@ def annotate_local_extrema(x: np.ndarray, y: np.ndarray, axis: plt.Axes, order: 
 
     # Annotate local maxima
     for i in local_maxima_indices:
-        max_coords = (x[i], y[i])
+        max_coords = (float(x[i]), float(y[i]))
         axis.annotate(f'Max: {max_coords}', xy=max_coords, xytext=(10, 10), textcoords='offset points', bbox=dict(boxstyle='round, pad=0.2', fc='white', ec='none', alpha=0.8),
                       arrowprops=dict(arrowstyle="->", color='r'))
 
     # Annotate local minima
     for i in local_minima_indices:
-        min_coords = (x[i], y[i])
+        min_coords = (float(x[i]), float(y[i]))
         axis.annotate(f'Min: {min_coords}', xy=min_coords, xytext=(10, -10), textcoords='offset points', bbox=dict(boxstyle='round, pad=0.2', fc='white', ec='none', alpha=0.8),
                       arrowprops=dict(arrowstyle="->", color='b'))
 # =============================================================================
@@ -962,7 +963,7 @@ def compute_signal_time_dsps(signal: np.ndarray, sample_rate: Union[float, int])
     freq1, Pxx_density1 = periodogram(
         signal,  fs=sample_rate, window=boxcar(N), detrend=False)  # type: ignore
     # print(type(psd_from_periodogram))
-    freq2, Pxx_density2 = welch(signal, fs=sample_rate, window=hamming(1000),
+    freq2, Pxx_density2 = welch(signal, fs=sample_rate, window=hamming(1000), # type: ignore
                                 nperseg=1000, noverlap=500, nfft=N, detrend=False,  # type: ignore
                                 axis=0)
 
@@ -1803,6 +1804,49 @@ def compute_psds_for_each_epoch_all_signals(input_dict: dict, sample_rate: Union
 
     return output_dict
 
+# =============================================================================
+############################## ERSP calculations  #############################
+# =============================================================================
+def compute_ERSPs_via_events_psds(reference_PSDs: np.ndarray, event_PSDs: np.ndarray) -> np.ndarray:
+    '''
+    Computes ERSP using reference and event periods' PSDs
+    - Calculates the percentage change relative to the reference PSD
+
+    
+    Parameters
+    ----------
+
+        - `reference_PSDs` (np.ndarray): PSD magnitudes of the reference period as a 2D array with each column is the PSD of an epoch
+        - `event_PSDs` (np.ndarray): PSD magnitudes of the event period as a 2D array with each column is the PSD of an epoch
+
+    Returns:
+    ----------
+        - `ersp` (np.ndarray): 2D array of ERSPs where each column represents the ersps of one event
+
+    # Sources of ERSP calculation method:
+    - G.Pfurtscheller et al., Event-related EEG/MEG synchronization and desynchronization: basic principles (page 4)
+        - DOI: 10.1016/s1388-2457(99)00141-8
+        - https://pubmed.ncbi.nlm.nih.gov/10576479/
+    - K.Nakayashiki et al., Modulation of event-related desynchronization during kinematic and kinetic hand movements (page 5)
+        - DOI: 10.1186/1743-0003-11-90
+        - https://jneuroengrehab.biomedcentral.com/articles/10.1186/1743-0003-11-90
+    '''
+    # Rounding step to tackle imprecision in PSD results (on non-existing frequency components)
+    round_button = True
+    if round_button:
+        reference_PSDs = np.around(reference_PSDs, decimals=6, out=None)
+        event_PSDs = np.around(event_PSDs, decimals=6, out=None)
+
+    reference_PSDs = np.sqrt(reference_PSDs)
+    event_PSDs = np.sqrt(event_PSDs)
+
+    # Nayakashki's ERSP Formula
+    diff_PSDs = np.subtract(event_PSDs,reference_PSDs)
+    ersp = np.divide(diff_PSDs, reference_PSDs,out=np.zeros_like(reference_PSDs), where=reference_PSDs!=0) * 100
+    
+    # Manage nan values
+    ersp = np.nan_to_num(ersp, copy=False, nan=0.0)  
+    return ersp
 
 # =============================================================================
 ############################# Signal preprocessing  ###########################
@@ -1871,6 +1915,7 @@ def filter_signal(input_signals: np.ndarray, sample_rate: Union[int, float], ord
         - `freq_test_BP` (ndarray): Frequency vector for verification of the filter response.
         - `magnitude_test_BP` (ndarray): Magnitude vector for verification of the filter response.
     """
+    LOW_CUTOFF_FREQ_THEORETICAL,HIGH_CUTOFF_FREQ_THEORETICAL,NOTCH_CUTOFF_FREQ = None,None,None
     if len(cutofffreq) < 2 or len(cutofffreq) > 3:
         raise ValueError(
             f"cutofffreq tuple length:{len(cutofffreq)} - Input tuple length must be between 2 and 3")
