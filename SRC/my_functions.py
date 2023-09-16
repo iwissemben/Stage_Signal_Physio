@@ -1,12 +1,17 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+# xdf file importation
+import pyxdf 
 # library for creating filters
 from scipy.signal import welch, periodogram, get_window, hamming, boxcar
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset, inset_axes
 
+from my_filters import *
+
+
 # =============================================================================
-############################# Stream_Finder_by_name  ##########################
+############################### Manage Xdf files  #############################
 # =============================================================================
 
 
@@ -28,6 +33,43 @@ def stream_Finder_by_name(datalist, name):
             print(streamindex)
             # print(i["info"]["type"])
             return streamindex
+        
+def create_marker_times_labels_array(marker_time_stamps:np.ndarray=None,marker_labels:np.ndarray=None,xdf_input_filepath:str=None):
+    """
+    Create an array combining the markers labels and their timestamps.
+        If xdf file specified, timestamps are retrieved from the file and processed to start relative to recording start, not to unix epoch anymore.
+        If marker_time_stamps and marker_labels, the arrays are stacked and returned as defined.
+
+
+    Parameters
+    ----------
+        marker_time_stamps(np.ndarray): 1D array containing the marker timestamps.
+        marker_labels(np.ndarray): 1D array containing the markers labels.
+        xdf_input_filepath(str): Filepath of the EEG recordings as xdf file.
+        
+    Returns
+    -------
+        markers_times_labels(np.ndarray): 2D array containing the markers's timestamps alongside their labels.
+    """
+    all_args =[xdf_input_filepath,marker_time_stamps,marker_labels]
+    is_all_none = all(element is None for element in all_args)
+    
+    if is_all_none:
+        print("No arguments specified.")
+        markers_times_labels=None
+    elif xdf_input_filepath:
+        #Retrieve directly from xdf file markers timestamps relative to recording start and their labels
+        xdf_data, header = pyxdf.load_xdf(xdf_input_filepath, select_streams=[{'type': 'EEG'}, {
+                                    'type': 'Markers', 'name': 'MouseToNIC'}])
+        EEG_stream=xdf_data[0]
+        Mouse_markers_stream=xdf_data[1]
+        Mouse_markers_labels=Mouse_markers_stream["time_series"]
+        Mouse_markers_times=Mouse_markers_stream["time_stamps"]-EEG_stream["time_stamps"][0]
+        markers_times_labels=np.column_stack((Mouse_markers_times,Mouse_markers_labels))
+    else:
+        #stack given arrays to create the marker_times_labels array
+        markers_times_labels=np.column_stack((marker_time_stamps,marker_labels))
+    return markers_times_labels
 # =============================================================================
 ############################# show_markers  #####################################
 # =============================================================================
@@ -65,9 +107,9 @@ def show_markers(plot_type, markers_times_array: np.ndarray):
 # =============================================================================
 
 
-def single_plot(filename: str, fig_number: int, x: np.ndarray, y: np.ndarray, fig_title: str,
+def single_plot(filename: str, x: np.ndarray, y: np.ndarray, fig_title: str,
                 xlabel: str, ylabel: str, markers_times_array: np.ndarray = None, point_style: str = "-k",
-                line_width: int | float = 1):
+                line_width: int | float = 1,fig_number: int=None):
     """
     Custom multipurpose function that displays a single graph
 
@@ -82,7 +124,8 @@ def single_plot(filename: str, fig_number: int, x: np.ndarray, y: np.ndarray, fi
     outputs: [None]
     """
     # Creation of the figure
-    plt.figure(fig_number)
+    if fig_number:
+        plt.figure(fig_number)
     plt.plot(x, y, point_style, lw=line_width)
     plt.title(str(fig_title+"\n"+filename))
     plt.xlabel(str(xlabel))
@@ -92,6 +135,7 @@ def single_plot(filename: str, fig_number: int, x: np.ndarray, y: np.ndarray, fi
     if markers_times_array is not None:
         show_markers(plt, markers_times_array)
     plt.legend()
+    plt.show()
 
 # =============================================================================
 ############################# Mosaic_plotter  #################################
@@ -209,15 +253,23 @@ def filtfilt_cutoff_frequency_corrector(order: int, cutoff_freq: float | int, sa
 # =============================================================================
 
 
-def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.ndarray):
+def nearest_timestamps_array_finder2(EEG_times_stamps: np.ndarray, markers: np.ndarray):
     """
-    Function that finds the nearest timestamps in EEG signal to each marker
+    Finds the nearest timestamps to each marker in EEG signal timestamps array 
 
-    Useful when the marker timestamps may not be found in the EEG data due to Srate and time launch.
-    Computes the 
+        Application: 
+            Useful when the markers timestamps may not be found in the EEG data due to Srate and time launch.
+                ie: if the marker timestamps are foudn between two signal samples.
 
+    Parameters:
+    -----------
+        EEG_times_stamps(np.ndarray): 1D array of the signal timestamps
+        markers (np.ndarray): 2D array (markers_original_timestamps,marker_labels)
+    Returns:
+    -------
+        nearest_indices_timestamps(np.ndarray): 2D array  as [nearest_time_stamps_indices EEG,nearest_time_stamps]
     inputs: numpy.ndarray(1D),numpy.ndarray(1D)
-    outputs: numpy.ndarray(2D) as [nearest_time_stamps_indices EEG,nearest_time_stamps]
+
     """
     nearest_time_stamps = []
     nearest_time_stamps_indices = []
@@ -238,6 +290,65 @@ def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.nd
         nearest_time_stamps_indices)
     nearest_indices_timestamps = np.column_stack(
         (nearest_time_stamps_indices, nearest_time_stamps))
+
+    return nearest_indices_timestamps
+
+def nearest_timestamps_array_finder(EEG_times_stamps: np.ndarray, markers: np.ndarray):
+    """
+    Finds the nearest marker timestamps corresponding to a sample in EEG signal timestamps array.
+
+    For each marker timestamp, the function looks for the nearest timestamp in EEG signal timestamps array
+    and its corresponding index.
+    
+    Application: 
+        Useful when the markers timestamps may not be found in the EEG data due to Srate and time launch.
+            ie: if the marker timestamps are foudn between two signal samples.
+
+    Parameters:
+    -----------
+        EEG_times_stamps (np.ndarray): 1D array of the signal timestamps
+        markers (np.ndarray): 2D array (markers_original_timestamps,marker_labels)
+
+    Returns:
+    -------
+        nearest_indices_timestamps (dict): Dictionary of 3 key-value pairs, each value being a 1D array
+            "markers_timestamps" :  1D array of the timestamps associated to each marker.\n
+            "markers_timestamp_indices" : 1D array of the index values of the associated timestamps in the signal time array.\n
+            "marker_labels" : 1D array of the marker labels.\n
+    """
+    nearest_time_stamps = []
+    nearest_time_stamps_indices = []
+    print("MARKERS LEN:", len(markers))
+
+    #iterate over the  marker timestamps
+    for y in markers[:, 0]:
+        original_time_stamp = y
+        # array of differences beween the eeg times and the original marker' timestamp
+        difference_array = np.absolute(
+            EEG_times_stamps-original_time_stamp)
+        # find the index of the minimal difference in the markers times stamps (nearest timestamp)
+        index = difference_array.argmin()
+        # append it to the liste of nearest timestamps
+        nearest_time_stamps.append(EEG_times_stamps[index])
+        nearest_time_stamps_indices.append(index)
+
+    #convert the list to array
+    nearest_time_stamps = np.array(nearest_time_stamps)
+    nearest_time_stamps_indices = np.array(
+        nearest_time_stamps_indices)
+    marker_labels=markers[:,1]
+
+    #stack arrays (nearest_index,nearest_timestamp,label)
+    """
+    nearest_indices_timestamps = np.column_stack(
+        (nearest_time_stamps_indices, nearest_time_stamps,marker_labels))
+    """
+    #store data in dictionary
+    nearest_indices_timestamps={
+        "markers_timestamp_indices":nearest_time_stamps_indices,
+        "markers_timestamps":nearest_time_stamps,
+        "marker_labels":marker_labels
+    }
 
     return nearest_indices_timestamps
 
@@ -361,17 +472,37 @@ def compute_lagged_psd2_all_electrodes(EEG_data: np.ndarray, Srate: float | int,
 # =============================================================================
 ##################### Plot temporal signal and its DSPs  ######################
 # =============================================================================
+def create_positive_frequency_vector(Fs:int, N:int):
+    """
+        Create positive frequency vector.
+        Parameters:
+        ----------
+        Fs (int): Sampling frequency of the signal (in Hz)
+        N (int): Length of the signal
 
+        Return:
+        -------
+        frequencies(np.ndarray): 1D array of frequencies ranging from 0 to the Nyquist frequency by Fs/2 step.
+    """
+    # Calculate the frequency resolution
+    freq_resolution = Fs / N
+
+    # Create the frequency vector from 0 Hz to Fs/2
+    frequencies = np.linspace(0, Fs/2, N//2 + 1)
+
+    return frequencies
 
 def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
     """
     Computes the PSD of a signal using 3 different methods (via FFT, via Scipy's periodogram and welch functions).
 
     Parameters:
+    ----------
         signal (np.ndarray): 1D array of amplitudes
         sample_rate (int): sampling rate of the signal
 
     Return:
+    -------
         time_signal (dict): Dictionary containing signal's timepoints and amplitudes as ndarray under key1 "time_vector" and key2 "amplitudes".
         PSD_fft (dict) : Dictionary containing signal's DSP results computed via FFT: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
         PSD_p (dict) : Dictionary containing signal's DSP results computed via periodogram: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
@@ -386,14 +517,21 @@ def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
 
     # compute FFT of the signal
     signal_fft = np.fft.fft(signal)
-    signal_frequency_vector = np.fft.fftfreq(len(signal), 1/sample_rate)
+    #signal_frequency_vector = np.fft.fftfreq(N, 1/sample_rate)
+    signal_frequency_vector=create_positive_frequency_vector(Fs=sample_rate,N=N)
+    freq_vector_len=len(signal_frequency_vector)
+
+    #signal_frequency_vector = np.arange(0,(sample_rate//2)+freq_res,freq_res)
+    print(f"signal_frequency_vector before crop len:{len(signal_frequency_vector)},half_val: {signal_frequency_vector[-(freq_vector_len//2)]}")
 
     # Only keep the positive frequencies and associated amplitudes
-    signal_frequency_vector = signal_frequency_vector[0:(
-        (len(signal_frequency_vector)//2)+1)]  # +1 due to python intervals
-
-    signal_fft = signal_fft[0:((len(signal_fft)//2)+1)]
-
+    """
+    signal_frequency_vector = signal_frequency_vector[:(
+        ((freq_vector_len//2 +1)))]  # +1 due to python intervals
+    """
+    print(f"signal_frequency_vector last freq : {signal_frequency_vector[-1]}")
+    signal_fft = signal_fft[:((N//2)+1)]
+    
     # compute PSD via FFT
     psd_from_fft = (np.abs(signal_fft)**2)/(N*sample_rate)
 
@@ -411,98 +549,6 @@ def compute_signal_time_dsps(signal: np.ndarray, sample_rate: int):
     PSD_p = {"frequencies": freq1, "psds": Pxx_density1}
     PSD_w = {"frequencies": freq2, "psds": Pxx_density2}
     return time_signal, PSD_fft, PSD_p, PSD_w
-
-
-def plot_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int, signal_name: str, external_results: np.array = None):
-    """
-    Plots the time signal alongside its 3 PSDs.
-
-    Calls compute_signal_time_dsps() and plots the results as figure of 4 subplots (lines).
-    If external_results provided the function will superimpose the external results to each corresponding PSD subplot and add an inset zoom to check differences.
-
-    Parameters:
-        fig_number (int): Number of the figure.
-        signal (np.ndarray): 1D array of amplitudes.
-        sample_rate (int): sampling rate (in Hz).
-        signal_name (str): Name of the signal for figure title.
-        external_results (ndarray): array of PSD results. Each results is formed by 2 columns (frequencies, respective psd result). Must be 3*2 columns (3 PSD methods)
-    External results must be an array array of 6 columns arranged by two as 3*(frequenceies,psds) for each PSD calculation method.
-
-    Return:
-        PSD_fft (dict) : Dictionary containing signal's DSP results computed via FFT: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
-        PSD_p (dict) : Dictionary containing signal's DSP results computed via periodogram: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
-        PSD_w (dict) : Dictionary containing signal's DSP results computed via welch: frequencies and amplitudes as ndarray under key1 "frequencies" and key2 "psds".
-    """
-    # compute the PSDs of a signal using 3 different methods
-    time_signal, PSD_fft, PSD_p, PSD_w = compute_signal_time_dsps(
-        signal=signal, sample_rate=sample_rate)
-
-    # Show the time signal and the 3 different results of the PSD
-    figure, axis = plt.subplots(4, figsize=(
-        10, 7), layout="constrained", num=fig_number)
-    figure.suptitle(signal_name + " :\n Time-signal and DSPs")
-
-    # plot time signal
-    axis[0].plot(time_signal["time_vector"], time_signal["amplitudes"], "-k")
-    # axis[0].set_title('Time signal')
-    axis[0].set_ylabel("Amplitude(µV)")
-    axis[0].set_xlabel("time(s)")
-    axis[0].set_xlim(0)
-    axis[0].grid()
-
-    # plot signal's DSP via FFT
-    axis[1].plot(PSD_fft["frequencies"], PSD_fft["psds"], label="Python")
-    # axis[1].set_title('PSD from FFT')
-    axis[1].set_xlim(0)
-    axis[1].set_ylabel("PSD from \n FFT (µV²/Hz)")
-    axis[1].set_xlabel("Frequency (Hz)")
-    axis[1].grid()
-
-    # plot signal's DSP via periodogramm
-    axis[2].plot(PSD_p["frequencies"], PSD_p["psds"], label="_Python")
-    # axis[2].set_title('PSD from periodogramm (µV²/Hz)')
-    axis[2].set_xlim(0)
-    axis[2].set_ylabel("PSD from \n periodogramm \n (µV²/Hz)")
-    axis[2].set_xlabel("Frequency (Hz)")
-    axis[2].grid()
-
-    # plot signal's DSP via scipy.signal.welch
-    axis[3].plot(PSD_w["frequencies"], PSD_w["psds"], label="_Python")
-    # axis[3].set_title('DSP')
-    axis[3].set_xlim(0)
-    axis[3].set_ylabel("PSD signal.welch \n (µV²/Hz)")
-    axis[3].set_xlabel("Frequency (Hz)")
-    axis[3].grid()
-
-    # Superimpose to each PSD subplot other results (ex from matlab)
-    if external_results is not None:
-        PSD_fft_external = {
-            "frequencies": external_results[:, 0], "psds": external_results[:, 1]}
-        PSD_p_external = {
-            "frequencies": external_results[:, 2], "psds": external_results[:, 3]}
-        PSD_w_external = {
-            "frequencies": external_results[:, 4], "psds": external_results[:, 5]}
-
-        axis[1].plot(PSD_fft_external["frequencies"],
-                     PSD_fft_external["psds"], '--r', label="Matlab")
-        axis[2].plot(PSD_p_external["frequencies"],
-                     PSD_p_external["psds"], '--r', label="_Matlab")
-        axis[3].plot(PSD_w_external["frequencies"],
-                     PSD_w_external["psds"], '--r', label="_Matlab")
-
-        add_inset_zoom(ax=axis[1], x_data=(PSD_fft["frequencies"], PSD_fft_external["frequencies"]), y_data=(PSD_fft["psds"], PSD_fft_external["psds"]),
-                       zoom_region=(0, 20, 0, np.max(np.maximum(PSD_fft_external["psds"], PSD_fft["psds"]))))
-        add_inset_zoom(ax=axis[2], x_data=(PSD_p["frequencies"], PSD_p_external["frequencies"]), y_data=(PSD_p["psds"], PSD_p_external["psds"]),
-                       zoom_region=(0, 20, 0, 10))
-        add_inset_zoom(ax=axis[3], x_data=(PSD_p["frequencies"], PSD_w_external["frequencies"]), y_data=(PSD_w["psds"], PSD_w_external["psds"]),
-                       zoom_region=(0, 20, 0, 6))
-    else:
-        add_inset_zoom(ax=axis[1], x_data=PSD_fft["frequencies"], y_data=PSD_fft["psds"],
-                       zoom_region=(0, 50, 0, np.max(PSD_fft["psds"])))
-
-    figure.legend(title="Results source", loc="upper right")
-    return PSD_fft, PSD_p, PSD_w
-
 
 def add_inset_zoom(ax: plt.Axes, x_data, y_data: np.ndarray, zoom_region: tuple):
     """
@@ -545,6 +591,148 @@ def add_inset_zoom(ax: plt.Axes, x_data, y_data: np.ndarray, zoom_region: tuple)
                       labelleft=True, labelbottom=True)
     axins.grid(visible=True, linestyle='--', linewidth=0.5)
 
+def plot_single_signal_time_dsps(fig_number: int, signal: np.ndarray, sample_rate: int, fig_title: str, external_results: str = None):
+    """
+    Plots a single time signal alongside its 3 PSDs.
+
+    Calls compute_signal_time_dsps() and plots the results as figure of 4 subplots (lines).
+    If external_results specified, calls import_psd_results2() to superimpose the external results to each corresponding PSD subplot and add an inset zoom to check differences.
+    
+    Returns 2 dictionaries (psd_python_results, psd_matlab_results), each containing the PSD results (from fft,periodogram,welch) of the desired signal.
+        For both, results are stored under respective keys (key1,key2,key3)=("PSD_FFT","PSD_P","PSD_W")
+
+    Parameters:
+    ----------
+        fig_number (int): Number of the figure.
+        signal (np.ndarray): 1D array of amplitudes.
+        sample_rate (int): sampling rate (in Hz).
+        fig_title (str): Title of the figure.
+        external_results (str): external psd results filename with extension.csv (cf function import_psd_results2()).
+            External results must be an array of 6 columns arranged by two, as 3*(frequenceies,psds), for each PSD calculation method.
+
+    Return:
+    ----------
+        psd_results (dict) : Dictionary of two key:value pairs containing a signal's DSP results (FFT,periodogram,welch).
+            key1:"Python_PSD_results"; value1: Dictionary of results from 'compute_signal_time_dsps()' function
+            key2:"Matlab_PSD_results"; value1: Dictionary of results from 'import_psd_results2() function
+    """
+    # compute the PSDs of a signal using 3 different methods
+    time_signal, PSD_fft, PSD_p, PSD_w = compute_signal_time_dsps(
+        signal=signal, sample_rate=sample_rate)
+    psd_python_results={'PSD_FFT':PSD_fft,'PSD_P':PSD_p,'PSD_W':PSD_w}
+
+
+    # Show the time signal and the 3 different results of the PSD
+    figure, axis = plt.subplots(4, figsize=(
+        10, 7), layout="constrained", num=fig_number)
+    figure.suptitle(fig_title + " :\n Time-signal and DSPs")
+
+    # plot time signal
+    axis[0].plot(time_signal["time_vector"], time_signal["amplitudes"], "-k")
+    # axis[0].set_title('Time signal')
+    axis[0].set_ylabel("Amplitude(µV)")
+    axis[0].set_xlabel("time(s)")
+    #axis[0].set_xlim(0)
+    axis[0].grid()
+
+    # plot signal's DSP via FFT
+    axis[1].plot(PSD_fft["frequencies"], PSD_fft["psds"], label="Python")
+    # axis[1].set_title('PSD from FFT')
+    #axis[1].set_xlim(0)
+    axis[1].set_ylabel("PSD from \n FFT (µV²/Hz)")
+    axis[1].set_xlabel("Frequency (Hz)")
+    axis[1].grid()
+
+    # plot signal's DSP via periodogramm
+    axis[2].plot(PSD_p["frequencies"], PSD_p["psds"], label="_Python")
+    # axis[2].set_title('PSD from periodogramm (µV²/Hz)')
+    #axis[2].set_xlim(0)
+    axis[2].set_ylabel("PSD from \n periodogramm \n (µV²/Hz)")
+    axis[2].set_xlabel("Frequency (Hz)")
+    axis[2].grid()
+
+    # plot signal's DSP via scipy.signal.welch
+    axis[3].plot(PSD_w["frequencies"], PSD_w["psds"], label="_Python")
+    # axis[3].set_title('DSP')
+    #axis[3].set_xlim(0)
+    axis[3].set_ylabel("PSD signal.welch \n (µV²/Hz)")
+    axis[3].set_xlabel("Frequency (Hz)")
+    axis[3].grid()
+
+    # Superimpose to each PSD subplot other results (ex from matlab)
+    if external_results is not None:        
+        PSD_fft_external,PSD_p_external,PSD_w_external=import_psd_results2(psd_results_file_name=external_results)
+        psd_matlab_results={'PSD_FFT':PSD_fft_external,'PSD_P':PSD_p_external,'PSD_W':PSD_w_external}
+        print(f"len psd matlab fft:{len(psd_matlab_results['PSD_FFT']['frequencies'])}")
+
+
+        axis[1].plot(PSD_fft_external["frequencies"],
+                     PSD_fft_external["psds"], '--r', label="Matlab")
+        axis[2].plot(PSD_p_external["frequencies"],
+                     PSD_p_external["psds"], '--r', label="_Matlab")
+        axis[3].plot(PSD_w_external["frequencies"],
+                     PSD_w_external["psds"], '--r', label="_Matlab")
+
+        add_inset_zoom(ax=axis[1], x_data=(PSD_fft["frequencies"], PSD_fft_external["frequencies"]), y_data=(PSD_fft["psds"], PSD_fft_external["psds"]),
+                       zoom_region=(0, 30, 0, np.max(np.maximum(PSD_fft_external["psds"], PSD_fft["psds"]))))
+        add_inset_zoom(ax=axis[2], x_data=(PSD_p["frequencies"], PSD_p_external["frequencies"]), y_data=(PSD_p["psds"], PSD_p_external["psds"]),
+                       zoom_region=(0, 30, 0, 10))
+        add_inset_zoom(ax=axis[3], x_data=(PSD_p["frequencies"], PSD_w_external["frequencies"]), y_data=(PSD_w["psds"], PSD_w_external["psds"]),
+                       zoom_region=(0, 30, 0, 6))
+        psd_results={'Python_PSD_results':psd_python_results,'Matlab_PSD_results':psd_matlab_results}
+
+    else:
+        add_inset_zoom(ax=axis[1], x_data=PSD_fft["frequencies"], y_data=PSD_fft["psds"],
+                       zoom_region=(0, 40, 0, np.max(PSD_fft["psds"])))
+        psd_results={'Python_PSD_results':psd_python_results}
+
+    figure.legend(title="Results source", loc="upper right")    
+    return psd_results
+
+def plot_multi_signal_time_dsps(multi_channel_signals: np.ndarray, sample_rate:float,
+                                channels_dict:dict, selected_channel_numbers:np.ndarray,input_signal_filename:str):    
+    """
+    Plots multiple time signals alongside their respective 3 PSDs.
+    Based on the plot_single_signal_time_dsps() which is repeated for each selected channel.
+        If multiple channels (n) are selected, plot_single_signal_time_dsps() is called n times.
+    Calls list_matlab_psd_results_filenames() to list external psd results filename of selected channels.
+    
+    Returns a dictionary containing for each electrodes the results of plot_single_signal_time_dsps() function
+
+    Parameters:
+    ----------
+        multi_channel_signals(np.ndarray): 2D array of amplitudes
+        sample_rate (int): sampling rate (in Hz)
+        channels_dict(dict): dictionary of channels names
+        selected_channel_numbers(np.ndarray): 1D array of channel numbers to study
+        input_signal_filename(str): name of the input file containing time-signals (used also to retrieve matlab results)
+
+    Return:
+    ----------
+        electordes_results_dict (dict) : Dictionary of n key:value pairs containing n signal's (python and matlab) DSP results (FFT,periodogram,welch).
+            keyi:"channel_name_i" ; valuei:psd_results
+            where psd_results(dict) is output of plot_single_signal_time_dsps().
+    """
+    selected_channel_indexes=selected_channel_numbers-1
+
+    #For each selected electrode, determine the filenames of the appropriate external (psd) results
+    MATLAB_PSD_results_filenames_list=list_matlab_psd_results_filenames(input_signal_filename=input_signal_filename,
+                                                                        channels_dict=channels_dict,
+                                                                        selected_channel_numbers=selected_channel_numbers)
+    electordes_results_dict={}
+    for iter,(channel_num,channel_index,matlab_results_filename) in enumerate(zip(selected_channel_numbers,selected_channel_indexes,MATLAB_PSD_results_filenames_list)):
+        channel_name=f"Channel_{str(channel_num)}_{channels_dict['Channel_'+str(channel_num)]}"
+        print("channel name:",channel_name)
+        figure_title=f"{input_signal_filename}\n {matlab_results_filename} \n {channel_name}"
+        print(figure_title)
+        channel_i_signal=multi_channel_signals[:,channel_index] #select correct signal
+        electrode_i_psd_results=plot_single_signal_time_dsps(fig_number=iter, signal=channel_i_signal,
+                                                             sample_rate=sample_rate, fig_title=figure_title,
+                                                             external_results=matlab_results_filename)
+        key=f"{channel_name}"
+        value=electrode_i_psd_results
+        electordes_results_dict[key] = value  # Ajoute la paire clé-valeur au dictionnaire
+    return electordes_results_dict
 
 # =============================================================================
 ############################ Generate test signal  ############################
@@ -612,72 +800,280 @@ def compute_average_ratio_for_event_on_blocks_for_all_electrodes(mat3d):
     return mean_per_row_per_plane_test_block1, mean_per_row_per_plane_test_block2
 
 # =============================================================================
-############################ New compute lagged PSD  ##############################
+############################ New compute lagged PSD  ##########################
 # =============================================================================
 
 
-def get_segment_coordinates2(reference_index, segment_time_length, sample_rate):
+def get_segment_coordinates2(reference_index:int, segment_time_length, sample_rate):
     """
-    Gives the indices of a
+    Gets the coordinates of segments of specified time length on each side of a reference index.
 
-    Gives the coordinate of segments of specific time length around reference index.
-    segment_time_length: expressed in seconds
+    Returns 3 coordinates defining 2 segments:
+        (Lower end, reference_index) and (reference_index,higher_end)
 
-    retunrs coordinates (lower , reference , and higher coordinates)
+    Application: Allows to retieve the coordinates of the 2 segments surrounding a marker :
+        ie:1s before the marker and 1s after the marker.
+
+    Parameters:
+    -----
+        reference_index (int): sample index used as reference to define a segment
+        segment_time_length (int): expressed in seconds
+        sample_rate (int): Sample rate
+
+    Returns:
+    ------
+        segments_coordinates (dict): coordinates of the segments as indexes
+            key1:"reference_end"
+            key2:"lower_end"
+            key3: "higher_end"
     """
-    nperseg = segment_time_length*sample_rate  # number of points in the segment
-    reference_end = reference_index
+
+    # Length of the segment expressed in number of points
+    nperseg = segment_time_length*sample_rate  
+    
     lower_end = reference_index - nperseg
     higher_end = reference_index + nperseg
+    reference_end = reference_index
     # print("lower end: ", lower_end, ",reference: ",reference_end, "higher end: ", higher_end)
-    return {"reference_end": reference_end, "lower_end": lower_end, "higher_end": higher_end}
+
+    segments_coordinates={"reference_end": reference_end, "lower_end": lower_end, "higher_end": higher_end}
+    return segments_coordinates
 
 
-def get_signal_segement2(signal, lower_end: int, higher_end: int):
+def get_signal_segement2(signal:np.ndarray, lower_end: int, higher_end: int):
     """
-    Slice the signal between two indices and returns the segmented signal
+    Get a segment of a given signal.
+        The segment to extract is defined by its coordinates (lower_end,higher_end) expressed as the corresponding indexes of the signal array.
+            Note: array slicing already takes into account python [lower_end,higher_end+1]
+
+    Parameters:
+    ------
+        lower_end (int): index of the lower end of the segment
+        higher_end (int): index of the higher end of the segment
+
+    Retruns:
+    ------
+        signal_segment (np.ndarray): signal segment data
+        signal_length (int): length of original segment
     """
     signal_length = len(signal)
     signal_segment = signal[lower_end:(higher_end+1)]  # cf python slicing
+    segment_length=len(signal_segment)
     return signal_segment, signal_length
 
-
-def compute_welch_estimation_on_segment2(segment, sample_rate, nfft: None):
+def extract_data_epochs(signal:np.ndarray,sample_rate:float,markers_labels_times:np.ndarray,select_events:tuple,epoch_limits:tuple[float,float]):
     """
-    Compute PSD using welch method on segment
+    Extract epochs from a signal.
+
+    Parameters
+    ---------
+        signal (np.array): 1D array of samples
+        srate (float): sampling rate of the signal
+        marker_labels_times (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        select_events (tuple): tuple of selected event types ex (111,100)
+        epoch_limits (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
+            ex1: (0,4) - From 0 sec before to 4 sec after the time-locking event.
+            ex2: (1,2) - From 1 sec before to 2 sec after the time-locking event.
+
+    Returns
+    --------
+        epoched_signals (dict): Dictionary of epoched signals for each marker type
+            Keys (str): "label_markertype"
+            values (np.ndarray): 2D array of signal data epochs arranged as a column per event
+    """
+    #convert the marker_labels_times dictionary to a 2D array
+    array_markers_labels_times=np.column_stack(list(markers_labels_times.values()))
+    
+    #create the time vector of the entire signal
+    signal_times=np.arange(0,len(signal))*(1/sample_rate)
+
+    
+    #convert the epoch limits in number of points
+    n_points_before=epoch_limits[0]*sample_rate
+    n_points_after=epoch_limits[1]*sample_rate
+
+    print(f"Epoch limits relative to events (in sec): before: {epoch_limits[0]}s - after: {epoch_limits[1]}s")
+    print(f"Epoch limits relative to events (in samples): n_points_before_marker: {n_points_before} - n_points_after_marker: {n_points_after}")
+    
+    epoched_signals={}
+    for event in select_events:
+        print(f"Event type : {event} ------------ epochs :")
+        signal_segments = []
+        time_segments = []
+        for row in array_markers_labels_times:
+            if row[2]==event:
+                marker_index=row[0]
+                #calculate the coordinate of the segments
+                first_seg_coord=int(marker_index-n_points_before)
+                second_seg_coord=int(marker_index+n_points_after)
+                print(f"first_seg_coord: {first_seg_coord} - second_seg_coord: {second_seg_coord}")
+                #extract the segments and list them
+                signal_segment,_ = get_signal_segement2(signal=signal, lower_end=first_seg_coord, higher_end=second_seg_coord)
+                time_segment=signal_times[first_seg_coord:second_seg_coord+1]
+                signal_segments.append(signal_segment)
+                time_segments.append(time_segment)
+        #stack segments as columns in a 2D array
+        signal_segments=np.column_stack(signal_segments)
+        time_segments=np.column_stack(time_segments)
+        print(f"signal_segments shape: {signal_segments.shape}")
+        print(f"time_segments shape: {time_segments.shape}")
+        #store the stacked segments under key value corresponding to event label
+        key=f"label_{event}"
+        epoched_signals[key]={"signal_segments":signal_segments,"time_segments":time_segments}
+    return epoched_signals
+
+def compute_welch_estimation_on_segment2(segment:np.ndarray, sample_rate:float, nfft: int= None):
+    """
+    Compute PSD using welch method on a segment.
+        Relies on the scipy.welch function, which is parametered to divide the given signal into 4 segments, and use an overlap of 50%
+        For given signal of length N (samples), the frequency resolution will be Fr=Sample_rate/(N/4). For Fr=Fe/N, argument nfft=N must be specified .
+
+    Parameters:
+    ------
+        segment (np.ndarray): samples of signal. 
+        sample_rate (float) : sampling rate
+        nfft (int): Length of the FFT used, for zero padding welch.
+
+    Retruns:
+    ------
+        freqs (np.ndarray): array of welch frequencies.
+        Pxx_density (np.ndarray): array of welch power densities.
     """
 
-    segment_length = len(segment)  # number of points in the segment
+    segment_length = segment.shape[0] # number of points in the segment
     sub_segment_length=segment_length/4
     # split the segment in two sub segments with overlap of 50%
     freqs, Pxx_density = welch(segment, fs=sample_rate,
                                window="hann",
                                nperseg=sub_segment_length,detrend=False,
-                               noverlap=sub_segment_length//2,nfft=None,axis=0)
-    """
-    freqs, Pxx_density = welch(segment, fs=sample_rate, 
-                                window=hamming(segment_length, sym=False),
-                                nperseg=segment_length, nfft=nfft,
-                                noverlap=True, detrend=False, axis=0)
-    """
-
-    """ old
-            freq, Pxx_density = welch(signal[lower_end:reference_end+1],
-                                  fs=sample_rate, window="hann",
-                                  nperseg=delta_index, noverlap=delta_index//2, axis=0, detrend=False)
-    """
-
+                               noverlap=sub_segment_length//2,nfft=nfft,axis=0)
     return freqs, Pxx_density
 
-
-def compute_welch_on_a_signal_before_each_marker(signal, sample_rate, marker_times, segment_duration):
+def compute_psds_for_each_epoch(epochs:np.ndarray,sample_rate:float,nfft:int=None):
     """
-    marker_times is an array in which the first column must correspond to the indices of the markers timestamps in the signal time vector
+    Computes the the PSD of several epochs.
+
+    Parameters
+    ----------
+        epochs (np.ndarray): 2D array of signals, each column represents a signal
+        sample_rate (float): Sampling rate of the signals
+        nfft (int): Length of the FFT used, for zero padding welch
+ 
+    Returns
+    ----------
+        psd_results_all_epochs (dict): Dictionary of PSD estimation results:
+            "PSD_frequencies": 2D array of frequency results, each column corresponds to a signal\n
+            "PSD_magnitudes" : 2D array of PSD magnitudes results, each column corresponds to a signal\n
+    """
+    print(f"segments shapes to psd - {epochs.shape}")
+    frequencies=[]
+    Pxx_densities=[]
+    #compute the PSD estimation for each trial
+    for epoch in epochs.T:
+        freqs, Pxx_density=compute_welch_estimation_on_segment2(segment=epoch, sample_rate=sample_rate,nfft=nfft)
+        frequencies.append(freqs)
+        Pxx_densities.append(Pxx_density)
+
+    Pxx_densities=np.column_stack(Pxx_densities)
+    frequencies=np.column_stack(frequencies)
+    psd_results_all_epochs={"PSD_frequencies" : frequencies,"PSD_magnitudes" : Pxx_densities}
+
+    return psd_results_all_epochs
+
+def compute_averaged_psds_over_trials(trials:np.ndarray,sample_rate:float,nfft:int=None):
+    """
+    Computes the the PSD of several sample trials and averages their results.
+
+    Parameters
+    ----------
+        trials (np.ndarray): 2D array of trials where each column represents the signal of a trial
+        sample_rate (float): Sampling rate of the signal
+        nfft (int): Length of the FFT used, for zero padding welch
+ 
+    Returns
+    ----------
+        mean_frequencies (np.ndarray): 1D array of PSD estimation frequency results
+        mean_pxx_densities (np.ndarray): 1D array of averaged PSD estimation power results
+    """
+    psd_results_all_epochs=compute_psds_for_each_epoch(epochs=trials,sample_rate=sample_rate,nfft=nfft)
+    
+    #average the PSDs
+    mean_frequencies=np.mean(psd_results_all_epochs["PSD_frequencies"],axis=1) #equals every frequency column of the frequencies array anyway
+    mean_pxx_densities=np.mean(psd_results_all_epochs["PSD_magnitudes"],axis=1)
+    
+    return mean_frequencies,mean_pxx_densities
+
+
+def signal_comparison(signal_1:np.ndarray,signal_2:np.ndarray,sample_rate:float,labels:tuple[str,str]):
+    """
+    Displays two time signals and their respective PSD estimation using welch method.
+        To compute the PSD estimates, 'compute_psds_for_each_epoch()' is called.
+
+    Parameters:
+    ----------
+        signal_1 (np.ndarray): 2D array with col_1:times,col_2=samples\n
+        signal_2 (np.ndarray): 2D array with col_1:times,col_2=samples\n
+        sample_rate (float): signals sampling rate\n
+        labels (tuple): length 2 tuple of signals labels (label_signal_1,label_signal_2)\n
+    Returns:
+    ----------
+    nothing
+    """
+    signals_to_compare=np.column_stack((signal_1[:,1],signal_2[:,1]))
+    print(f"signals to compare shape - {signals_to_compare.shape}")
+    N=len(signals_to_compare)
+    signals_psds=compute_psds_for_each_epoch(epochs=signals_to_compare,sample_rate=sample_rate,nfft=N)
+
+    figure, axis = plt.subplots(3,1,figsize=(15, 7),layout="constrained")
+    figure.suptitle("Signal comparison")
+
+    axis[0].set_title(f"Time signal 1: {labels[0]}")
+    axis[0].set_ylabel("Amplitudes (µV)")
+    axis[0].plot(signal_1[:,0],signal_1[:,1],color="blue")
+
+    axis[1].set_title(f"Time signal 2: {labels[1]}")
+    axis[1].set_xlabel("Time (s)")
+    axis[1].set_ylabel("Amplitudes (µV)")
+    axis[1].plot(signal_2[:,0],signal_2[:,1],color="red")
+
+    axis[2].set_title("Epochs PSDs")
+    axis[2].set_xlabel("Frequencies (Hz)")
+    axis[2].set_ylabel("Power (µV²/Hz)")
+    axis[2].plot(signals_psds["PSD_frequencies"][:,0],signals_psds["PSD_magnitudes"][:,0],label=f'{labels[0]}', color='blue')
+    axis[2].plot(signals_psds["PSD_frequencies"][:,1],signals_psds["PSD_magnitudes"][:,1],label=f'{labels[1]}', color='red')
+    axis[2].set_xlim(0,60)
+    axis[2].legend()
+    plt.show()
+
+def compute_welch_on_a_signal_before_each_marker(signal:np.ndarray, sample_rate:float, markers_array:np.ndarray, segment_duration:float):
+    """
+    Computes the DSP estimations of all segments of a signal.
+
+    The signal has as many segments as it has of markers. Each segment streches over the specified segment duration and ends at a marker.
+    The DSPs are then computed BEFORE each marker
+    
+    Note: 
+        Uses the markers_array indexes to define the segments.
+
+    For opposite operation, see the complementary function 'compute_welch_on_a_signal_after_each_marker()'.
+
+
+    Parameters:
+    ------
+        signal (np.ndarray): 1D array of signal samples.
+        sample_rate (float) : Signal sampling rate.
+        markers_array (dict): Dictionary of 2D arrays under 3 keys as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        segment_duration (float): length of the segment on which to compute the DSP estimation.
+        
+    Retruns:
+    ------
+        freqs (np.ndarray): array of welch frequencies.
+        Pxx_density (np.ndarray): array of welch power densities.
     """
     N = len(signal)
     freqs_for_all_markers = []
     PSDs_for_all_markers = []
-    for marker in marker_times[:, 0]:
+    for marker in markers_array["markers_timestamp_indices"]:
 
         segment_coordinates = get_segment_coordinates2(
             reference_index=marker, segment_time_length=segment_duration, sample_rate=sample_rate)
@@ -698,14 +1094,35 @@ def compute_welch_on_a_signal_before_each_marker(signal, sample_rate, marker_tim
     return {"PSD_frequencies": freqs_for_all_markers, "PSD_magnitudes": PSDs_for_all_markers}
 
 
-def compute_welch_on_a_signal_after_each_marker(signal, sample_rate, marker_times, segment_duration):
+def compute_welch_on_a_signal_after_each_marker(signal:np.ndarray, sample_rate:float, markers_array:np.ndarray, segment_duration:float):
     """
-    marker_times is an array in which the first column must correspond to the indices of the markers timestamps in the signal time vector
+    Computes the DSP estimations of all segments of a signal.
+
+    The signal has as many segments as it has of markers. Each segment starts at a marker and streches over the specified segment duration.
+    The DSPs are then computed AFTER each marker
+    
+    Note: 
+        Uses the markers_array indexes to define the segments.
+
+    For opposite operation, see the complementary function 'compute_welch_on_a_signal_before_each_marker()'.
+
+    Parameters:
+    ------
+        signal (np.ndarray): 1D array of signal samples.
+        sample_rate (float) : Signal sampling rate.
+        markers_array (dict): Dictionary of 2D arrays under 3 keys as ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        segment_duration (float): length of the segment on which to compute the DSP estimation.
+        
+    Retruns:
+    ------
+        freqs (np.ndarray): array of welch frequencies.
+        Pxx_density (np.ndarray): array of welch power densities.
     """
+
     N = len(signal)
     freqs_for_all_markers = []
     PSDs_for_all_markers = []
-    for marker in marker_times[:, 0]:
+    for marker in markers_array["markers_timestamp_indices"]:
 
         segment_coordinates = get_segment_coordinates2(
             reference_index=marker, segment_time_length=segment_duration, sample_rate=sample_rate)
@@ -724,3 +1141,376 @@ def compute_welch_on_a_signal_after_each_marker(signal, sample_rate, marker_time
     PSDs_for_all_markers = np.column_stack(PSDs_for_all_markers)
 
     return {"PSD_frequencies": freqs_for_all_markers, "PSD_magnitudes": PSDs_for_all_markers}
+
+
+# =============================================================================
+############################# Signal preprocessing  ###########################
+# =============================================================================
+def detrend_signals(raw_signals:np.array):
+    """
+    Remove linear trends from signals.
+
+    Parameters
+    ----------
+    raw_signals : ndarray
+        Array of raw signals arranged as columns.
+
+    Returns
+    ----------
+    EEG_amplitudes_centered : ndarray
+        Array of detrended signals arranged as columns (same shape as raw_signals).
+    """
+    print(f"input_signals shape:\n {raw_signals.shape}")
+    print(f"input_signals mean per signal:\n {np.mean(raw_signals,axis=0)}")
+    EEG_amplitudes_centered=raw_signals-np.mean(raw_signals,axis=0)
+    return EEG_amplitudes_centered
+
+def rereference_signals(input_signals:np.array):
+    """
+    Reference signals to average.
+
+    Parameters
+    ----------
+    input_signals : ndarray
+        Array of signals arranged as columns.
+
+    Returns
+    ----------
+    EEG_amplitudes_rereferenced : ndarray
+        Array of signals arranged as columns (same shape as input_signals).
+    """
+    print(f"input_signals shape:{input_signals.shape}")
+    print(f"input_signals whole mean:{np.mean(input_signals)}")
+    EEG_amplitudes_rereferenced=input_signals-np.mean(input_signals)
+    
+    return EEG_amplitudes_rereferenced
+
+def filter_signal(input_signals:np.array,sample_rate:int,order:int,cutofffreq:tuple):
+    """
+    Applies a series of filters on signals.
+    The first two input frequencies of the tuple cutofffreq are corrected before use by the adequate filters.
+
+    Parameters
+    ----------
+    input_signals : ndarray
+        Array of signals arranged as columns.
+    sample_rate : int
+        Sampling rate of the signals.
+    order : int
+        Order of the band pass filter. Also required to apply right correction to cutofffreq[0,2]
+    cutofffreq : tuple
+        Cutoff frequencies to be used by filters. 
+        Tuple must be len(cutofffreq) = 2 or 3.
+        Ordered as: cutofffreq=(low_cutoff_freq,low_cutoff_freq,notch_cutoff_freq)
+        
+
+    Returns
+    ----------
+    EEG_Filtered_NOTCH_BP : ndarray
+        Array of signals arranged as columns (same shape as input_signals).
+    freq_test_BP : ndarray
+        Frequency vector for verification of the filter response.
+    magnitude_test_BP : ndarray
+        magnitude vector for verification of the filter response.
+    """
+    if len(cutofffreq) < 2 or len(cutofffreq) > 3:
+        raise ValueError(f"cutofffreq tuple length:{len(cutofffreq)} - Input tuple length must be between 2 and 3")
+    try:
+        if len(cutofffreq)==3:
+            LOW_CUTOFF_FREQ_THEORETICAL,HIGH_CUTOFF_FREQ_THEORETICAL,NOTCH_CUTOFF_FREQ=cutofffreq
+        elif len(cutofffreq)==2:
+            LOW_CUTOFF_FREQ_THEORETICAL,HIGH_CUTOFF_FREQ_THEORETICAL=cutofffreq
+            NOTCH_CUTOFF_FREQ=None
+        # cutoff frequency correction for filtfilt application
+        LOW_CUTOFF_FREQ_CORRECTED = filtfilt_cutoff_frequency_corrector(
+            order, LOW_CUTOFF_FREQ_THEORETICAL, sample_rate, pass_type="high_pass")
+
+        HIGH_CUTOFF_FREQ_CORRECTED = filtfilt_cutoff_frequency_corrector(
+            order, HIGH_CUTOFF_FREQ_THEORETICAL, sample_rate, pass_type="low_pass")
+
+        """        print("LOW_CUTOFF_FREQ_THEORETICAL="+str(LOW_CUTOFF_FREQ_THEORETICAL) +
+            ", HIGH_CUTOFF_FREQ_THEORETICAL="+str(HIGH_CUTOFF_FREQ_THEORETICAL))
+                print("LOW_CUTOFF_FREQ_CORRECTED="+str(LOW_CUTOFF_FREQ_CORRECTED) +
+            ", HIGH_CUTOFF_FREQ_CORRECTED="+str(HIGH_CUTOFF_FREQ_CORRECTED))"""
+        
+        print(f"LOW_CUTOFF_FREQ_THEORETICAL={LOW_CUTOFF_FREQ_THEORETICAL},HIGH_CU-TOFF_FREQ_THEORETICAL={HIGH_CUTOFF_FREQ_THEORETICAL}")
+        print(f"LOW_CUTOFF_FREQ_CORRECTED={LOW_CUTOFF_FREQ_CORRECTED},HIGH_CUTOFF_FREQ_CORRECTED={HIGH_CUTOFF_FREQ_CORRECTED}")
+
+
+
+
+        # Filtering on all channels
+        if NOTCH_CUTOFF_FREQ is not None:
+            # 1-Notch-filter 50Hz [49,51] the centered-rereferenced signal
+            print(f"NOTCH_CUTOFF_FREQ={NOTCH_CUTOFF_FREQ}")
+
+            input_signals, freqs_test_NOTCH, magnitudes_test_NOTCH = notch_filter(input_signal=input_signals,
+                                                                                    sample_rate=sample_rate,
+                                                                                    cutoff_freq=NOTCH_CUTOFF_FREQ,
+                                                                                    stop_band_width=2)
+
+        # 2-Then Band-pass filter the signal filtered by notch
+        EEG_Filtered_NOTCH_BP, freq_test_BP, magnitude_test_BP = band_pass_filter(input_signal=input_signals,
+                                                                                sample_rate=sample_rate,
+                                                                                low_cutoff_freq=LOW_CUTOFF_FREQ_CORRECTED,
+                                                                                high_cutoff_freq=HIGH_CUTOFF_FREQ_CORRECTED,
+                                                                                filter_order=order)
+        print("Filtered signal shape:",np.shape(EEG_Filtered_NOTCH_BP))
+    except UnboundLocalError :
+        print(f"Specified cutofffreq={cutofffreq} - The tuple must contain only 2 or 3 elements as (low_cutoff_freq,high_cutoff_freq,notch_cutoff_freq)")
+    return EEG_Filtered_NOTCH_BP, freq_test_BP, magnitude_test_BP
+
+
+# =============================================================================
+############################## Matlab vs Python  ##############################
+# =============================================================================
+def rms(series1,series2,name:str,units:str="Units (NA)"): #litteral formula
+    """
+    Compute the root mean squared error of two series.
+    Returns the value and prints it
+
+    Parameters:
+    ----------
+        series1 (np.ndarray): 1D series to compare
+        series2 (np.ndarray): 1D series to compare
+
+    Returns:
+    ----------
+        rms (float): root mean squared error of two series
+    """
+    #rms=np.sqrt(((python - matlab) ** 2).mean())
+
+    diff=series1-series2
+    squared_diff=diff**2
+    mean_squared_diff=np.mean(squared_diff)
+    rms=np.sqrt(mean_squared_diff)
+    print(name+" = ",rms," (µV²/Hz)")
+    return rms
+
+def cv_percent(series1,series2):
+    """
+    [UNUSED]Compute coeffcient of variation (CV) of two series.
+    Returns the result expressed in (%)
+
+    Parameters:
+    ----------
+        series1 (np.ndarray): 1D series to compare
+        series2 (np.ndarray): 1D series to compare
+
+    Returns:
+    ----------
+        cv (float): coeffcient of variation  of two series
+    """
+    diff=series1-series2
+    #diff=np.std([series1,series2])
+    
+    squared_diff=diff**2
+    var=np.sqrt(squared_diff)
+    mean=(series1+series2)/2
+    cv=(var/mean)*100
+    return cv
+
+def abs_distance(series1,series2):
+    """
+    Compute the absolute differences of two series elementwise.
+    Returns a series of absolute differences.
+
+    Parameters:
+    ----------
+        series1 (np.ndarray): 1D series to compare
+        series2 (np.ndarray): 1D series to compare
+
+    Returns:
+    ----------
+        absolute_diff (np.ndarray): array of absolute differences.
+    """
+    diff=series1-series2
+    absolute_diff=abs(diff)
+    return(absolute_diff)
+
+def list_matlab_psd_results_filenames(input_signal_filename:str,channels_dict:dict[str],selected_channel_numbers:list[int]):
+    """
+    Lists the expected csv filenames of the matlab psd results for the selected channels.
+
+    Parameters:
+    ----------
+        input_signal_filename (str): name of the input eeg data file (with its csv extension)
+        channels_dict (dict): Dictionary of channel numbers as keys (ie Channel_x ) and names as values (ie C3)
+        selected_channel_numbers (list): List of the selected channel numbers (integers)
+
+    Returns:
+    ----------
+        matlab_results_filename_list(list): dictionary of the frequencies and PSDs estimates from matlabs FFT
+        PSD_p_results (dict): dictionary of the frequencies and PSDs estimates from matlabs periodogram function
+        PSD_w_results (dict): dictionary of the frequencies and PSDs estimates from matlabs welch function
+    """
+    matlab_results_filename_list=[]
+    channel_indexes=selected_channel_numbers-1
+    print("selected channels :")
+    for (i,y) in zip(selected_channel_numbers,channel_indexes):
+        print(f"channel number:{i}, channel index:{y}")
+        channel_name=f"Channel_{str(i)}_{channels_dict['Channel_'+str(i)]}"
+        print(channel_name)
+
+        #get name of corresponding matlab psd result 
+        filenamei=f"MATLAB_PSD_res_EEG_{channel_name}_{input_signal_filename }"
+
+        matlab_results_filename_list.append(filenamei)
+
+    print(f"matlab psd results file names: {matlab_results_filename_list}")
+
+    return matlab_results_filename_list
+
+def import_psd_results2(psd_results_file_name:str):
+    """
+    Imports psd data results generated (beforehand) by the matlab script.
+    Matlab psd results must be stored in the 'STAGE_SIGNAL_PHYSIO/DAT/OUTPUT/Matlab_PSD_Results' folder as csv files to be retrieved.
+
+        Returns 3 dictionaries (for each PSD estimation method) of two key-value pairs : 
+        (key1:"frequencies", value:(1D)array of frequencies) \n
+        (key2:"psds", value: (1D)array of PSD)
+
+    Parameters:
+    ----------
+        psd_results_file_name (str) :name of the input eeg data file (with its extension)
+
+    Returns:
+    ----------
+        PSD_fft_results (dict): dictionary of the frequencies and PSDs estimates from matlabs FFT
+        PSD_p_results (dict): dictionary of the frequencies and PSDs estimates from matlabs periodogram function
+        PSD_w_results (dict): dictionary of the frequencies and PSDs estimates from matlabs welch function
+
+    """
+    #filename="MATLAB_PSD_res_EEG_Channel_5_C3_001_MolLud_20201112_1_c_preprocessed_499.998_Hz"
+
+    filepath=f"./DAT/OUTPUT/Matlab_PSD_Results/{psd_results_file_name}"
+    print(filepath,type(filepath))
+    
+    matlab_data = np.genfromtxt(filepath, delimiter=';',skip_header=1)
+
+    PSD_fft_results = {
+        "frequencies": matlab_data[:, 0], "psds": matlab_data[:, 1]}
+    PSD_p_results = {
+        "frequencies": matlab_data[:, 2], "psds": matlab_data[:, 3]}
+    PSD_w_results = {
+        "frequencies": matlab_data[:, 4], "psds": matlab_data[:, 5]}
+
+    return PSD_fft_results,PSD_p_results,PSD_w_results
+
+def export_xdf_eeg_to_csv(xdf_filepath:str,PROCESS_SIGNAL:bool=False):
+    """
+    Access the xdf file, finds eeg stream and exports all channels data to csv.
+    Parameters:
+    ----------
+        xdf_filepath (str): filepath to the xdf file.
+        PROCESS_SIGNAL (bool): boolean to specify if xdf data must be preprocessed or not before export
+
+    Returns:
+    ----------
+         exportfilename (str): filename of the exported file
+    """
+    #### import raw data
+
+    # Define xdf file path
+    input_filepath = xdf_filepath
+    INPUT_FILENAME = os.path.splitext(os.path.basename(input_filepath))[0]
+    # path=os.path.normpath("../DAT/Input/001_MolLud_20201112_1_c.xdf")
+
+
+    print("Input filepath: ",input_filepath)
+    print("Input filename: ",INPUT_FILENAME)
+
+    # Loading streams of interest
+
+        # load_xdf returns selected streams as list of streams (ie.dictionary)
+    EEG_Stream, EEG_fileheader = pyxdf.load_xdf(input_filepath, select_streams=[{'type': 'EEG'}])
+    Mouse_markers_Stream, Mouse_markers_header = pyxdf.load_xdf(input_filepath, select_streams=[{'type': 'Markers', 'name': 'MouseToNIC'}])
+
+        # in case multiple streams havee been found
+    if len(EEG_Stream) and len(Mouse_markers_Stream) != 1:
+        raise ValueError("Multiple streams matching type restriction")
+    else: 
+        EEG_Stream=EEG_Stream[-1] #access to the only EEG stream of the list
+        Mouse_markers_Stream=Mouse_markers_Stream[-1]
+
+    # Get sampling rate
+    Srate = EEG_Stream["info"]["effective_srate"]
+    
+    # Manage EEG data
+        # Get amplitudes of each electrode
+    EEG_raw_amplitudes = EEG_Stream["time_series"]
+
+        # EEG channel name definition
+    channels_dict = {"Channel_1": "C4",
+                    "Channel_2": "FC2",
+                    "Channel_3": "FC6",
+                    "Channel_4": "CP2",
+                    "Channel_5": "C3",
+                    "Channel_6": "FC1",
+                    "Channel_7": "FC5",
+                    "Channel_8": "CP1"}
+    
+        
+        # Format EEG times_stamps (in unix time epoch) to seconds relative to the execution time of the recording
+    EEG_times = EEG_Stream["time_stamps"]-EEG_Stream["time_stamps"][0]
+
+    # Manage Markers data
+        # Select the marker labels
+    Markers_labels = Mouse_markers_Stream["time_series"]
+
+        # Markers start with a time relative to the execution time of the recording
+    Marker_times = (
+        Mouse_markers_Stream["time_stamps"]-EEG_Stream["time_stamps"][0])
+
+        # Stacking maker timestamps and labes as 2D array : [[markers_timesstamps],[markers_labels]]
+    Markers_times_labels = np.column_stack((Marker_times, Markers_labels))
+
+    #### Prepare data for export
+        # Process signals or not?
+    print("PROCESS_SIGNAL ? --",PROCESS_SIGNAL)
+
+    if PROCESS_SIGNAL is False:
+            print("--Keeping raw signals...")
+            EEG_for_export=EEG_raw_amplitudes
+            DATA_STATUS="raw"
+
+    elif PROCESS_SIGNAL is True:
+        print("--Processing signals")
+        print("Detrending...")
+        EEG_amplitudes_centered=detrend_signals(EEG_raw_amplitudes)
+        print("Rereferencing...")
+        EEG_amplitudes_rereferenced=rereference_signals(input_signals=EEG_amplitudes_centered)
+        print("Filtering...")
+        EEG_amplitudes_centered_filtered,_,_=filter_signal(input_signals=EEG_amplitudes_rereferenced,
+                                                    sample_rate=Srate,
+                                                    order=8,cutofffreq=(5,100,50))
+        EEG_for_export=EEG_amplitudes_centered_filtered
+        DATA_STATUS="prepro"
+    else:
+        raise ValueError('PROCESS_SIGNAL must be Boolean (True or False)')
+    
+    print(f"EEG_for_export shape : {EEG_for_export.shape}")
+
+        #Stack columns as electrodes signals followed by column of timestamps
+    amplitudes_times=np.column_stack((EEG_for_export,EEG_times))
+
+    #### Export to CSV file
+    print(f"--Exporting")
+
+    # Create header for CSV
+    header = ', '.join([f"{key}:{value}" for key, value in channels_dict.items()])
+    header=header+',time(sec)'
+    print("export data header :",header)
+
+    # Create filename
+    exportfilename=f"{INPUT_FILENAME}_{DATA_STATUS}_{round(Srate,3)}_Hz.csv"
+    exportfilepath=os.path.normpath("DAT/INPUT/"+exportfilename)
+
+    print(f"Input filepath : {input_filepath}")
+    print(f"Output filepath : {exportfilepath}")
+
+    # Export
+    np.savetxt(exportfilepath, amplitudes_times, delimiter=',', header=header, comments='', fmt='%d')
+    #np.savetxt(exportfilepath,times_amplitudes,delimiter=",")
+
+    return exportfilename
