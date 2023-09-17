@@ -1848,6 +1848,94 @@ def compute_ERSPs_via_events_psds(reference_PSDs: np.ndarray, event_PSDs: np.nda
     ersp = np.nan_to_num(ersp, copy=False, nan=0.0)  
     return ersp
 
+def compute_successive_epochs_ERSPs_for_all_signals(input_dict: dict, event_labels: tuple[str, str]) -> dict:
+    """
+    Computes the successive ERSPs of all signals
+        ERSPs are computed using the PSDs of two successive epoch of different type.
+        ERSP calculation is based on `compute_ERSPs_via_events_psds()`
+
+    Parameters:
+    ----------
+        - `input_dict`(dict): Dictionary of epoched signals and associated PSDs (output of `compute_psds_for_each_epoch_all_signals()`)
+        - `event_labels`(tuple): Tuple of event labels (str) of length two.
+            Used to select appropriately the epoch type for ERSP calculation
+            - event_labels[0] (str): label of the reference epochs (prior to event) to compute the ERSP
+            - event_labels[1] (str): label of the event epochs (after event marker) to compute the ERSP
+
+    Retruns:
+    -----------
+        `output_dict` as `input_dict` with new "ERSPs" key in Epochs dictionary alongside "time_signals" and "PSDs"
+        - `output_dict` (dict): Dictionary of epoched signals for all signals with their PSDs and ERSPs
+            - keys (str): `channel_name` ("Channel_i")
+            - value (dict): `epochs_dict`
+                - key (str): "Epochs"
+                - value (dict) : `time_signal_epochs_dict`
+                    - keys (str): "time_signals", "PSDs","ERSPs"
+                    - values (dict) : 
+                        - epoched_signal (<= extract_data_epochs() output), 
+                        - psd_results_all_epochs_of_type_i (<= compute_psds_for_each_epoch() output)
+                        - electrodei_ERSPs_dict (<=compute_ERSPs_via_events_psds() output)
+
+    Examples:
+    ----------
+    # Create a 2D array of signals
+        # Define the sample rate and duration
+        srate= 12  # samples per second
+        duration = 8
+        # Calculate the total number of samples
+        num_samples = int(srate * duration)
+
+        # Generate a time array with equally spaced time points
+        times = np.linspace(0, duration, num_samples, endpoint=False)
+
+        # Generate a 2d array of samples  composed of 6 signals (columns)
+        samples = np.random.uniform(low=-20, high=20, size=(num_samples,6))
+
+    # Create a 2d array of marker timestamps and labels
+        labels = [100,111,100,111,100,111]
+        timestamps = [1.2,2.2,3.2,4.2,5.2,6.2]
+        marker_timestamps_labels = create_marker_times_labels_array2(marker_labels=labels,marker_time_stamps=timestamps)
+
+    # Find the nearest sample timestamp to each marker
+        nearest_markers_array = nearest_timestamps_array_finder(signal_times_stamps=times,markers=marker_timestamps_labels)
+        print(nearest_markers_array["markers_timestamps"])
+
+    # Epoch the signals at once
+        epoch_limits = (0,1)
+        signals_epoched = extract_data_epochs_from_all_signals(signals=samples,sample_rate=srate,markers_labels_times=nearest_markers_array,
+                                                            select_events=(100,111),epoch_limits=epoch_limits)
+    # Compute PSD for all epochs of all signals at once
+        fft_length=len(signals_epoched["Channel_1"]["Epochs"]["time_signals"]["label_111"]["signal_segments"])
+        signals_epochs_psds = compute_psds_for_each_epoch_all_signals(input_dict=signals_epoched,sample_rate=srate,
+                                                                        nfft=fft_length)
+        signals_epochs_psds["Channel_1"]["Epochs"]["PSDs"]["label_100"]["PSD_magnitudes"]
+
+    #Compute successive ERSP for all signals at once (one time window)
+        signals_epochs_psds_ersps=compute_successive_epochs_ERSPs_for_all_signals(input_dict=signals_epochs_psds,event_labels=("label_100","label_111"))
+
+    Note: By default the length of the fft used to perform dsp estimation is the length of the epoch (nfft=None)
+    """
+    output_dict = input_dict.copy()
+
+    # Check if event_labels exist in input_dict
+    if not all(event_label in input_dict[list(input_dict.keys())[0]]["Epochs"]["PSDs"] for event_label in event_labels):
+        raise ValueError(f"Specified event labels {event_labels} do not correspond to those in input dictionary.")
+    else:
+        print(f"Event labels found: \n-Reference period label set to: {event_labels[0]}\n-Event period label set to: {event_labels[1]}")
+        for channel_name in input_dict:
+            reference_epochs_PSD = input_dict[channel_name]["Epochs"]["PSDs"][str(event_labels[0])]["PSD_magnitudes"]
+            event_epochs_PSD = input_dict[channel_name]["Epochs"]["PSDs"][str(event_labels[-1])]["PSD_magnitudes"]
+
+            successive_ersp_array_electrode_i = compute_ERSPs_via_events_psds(
+                reference_PSDs=reference_epochs_PSD, event_PSDs=event_epochs_PSD)
+            frequencies = output_dict[channel_name]["Epochs"]["PSDs"][str(event_labels[0])]["PSD_frequencies"][:, 0]
+
+            electrodei_ERSPs_dict = {"ERSP_frequencies": frequencies, "ERSP_magnitudes": successive_ersp_array_electrode_i}
+            output_dict[channel_name]["Epochs"]["ERSPs"] = electrodei_ERSPs_dict
+
+    return output_dict
+
+
 # =============================================================================
 ############################# Signal preprocessing  ###########################
 # =============================================================================
