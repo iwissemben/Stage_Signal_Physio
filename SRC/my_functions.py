@@ -103,7 +103,7 @@ def save_figures_to_pdf_single_per_page(pdf_filename: str, figures_list: list) -
     pdf_file.close()
 
 
-def save_figures_to_pdf_multiple_per_page(figures: List[matplotlib.figure.Figure], filename: str, rows_per_page: int = 2) -> None:
+def save_figures_to_pdf_multiple_per_page(figures: List[Figure], filename: str, rows_per_page: int = 2) -> None:
     """
     Save a list of Matplotlib figures to a PDF file with control over the number of
     rows of figures per page.
@@ -132,7 +132,7 @@ def save_figures_to_pdf_multiple_per_page(figures: List[matplotlib.figure.Figure
                 figure_index = page_num * rows_per_page + row
                 if figure_index < total_figures:
                     figure = figures[figure_index]
-                    axs[row].imshow(figure.canvas.renderer.buffer_rgba())
+                    axs[row].imshow(figure.canvas.renderer.buffer_rgba()) # type: ignore
                     axs[row].axis('off')
 
             plt.tight_layout()
@@ -595,6 +595,7 @@ def annotate_local_extrema(x: np.ndarray, y: np.ndarray, axis: plt.Axes, order: 
         - `axis`: parent plot on which annotation will be added
         - `order`: Number of neighboor points to consider for comparison
         - `window-size` (int): number of points used for computing the moving average of the distribution
+
     Returns:
     ----------
     """
@@ -608,13 +609,13 @@ def annotate_local_extrema(x: np.ndarray, y: np.ndarray, axis: plt.Axes, order: 
 
     # Annotate local maxima
     for i in local_maxima_indices:
-        max_coords = (x[i], y[i])
+        max_coords = (float(x[i]), float(y[i]))
         axis.annotate(f'Max: {max_coords}', xy=max_coords, xytext=(10, 10), textcoords='offset points', bbox=dict(boxstyle='round, pad=0.2', fc='white', ec='none', alpha=0.8),
                       arrowprops=dict(arrowstyle="->", color='r'))
 
     # Annotate local minima
     for i in local_minima_indices:
-        min_coords = (x[i], y[i])
+        min_coords = (float(x[i]), float(y[i]))
         axis.annotate(f'Min: {min_coords}', xy=min_coords, xytext=(10, -10), textcoords='offset points', bbox=dict(boxstyle='round, pad=0.2', fc='white', ec='none', alpha=0.8),
                       arrowprops=dict(arrowstyle="->", color='b'))
 # =============================================================================
@@ -962,7 +963,7 @@ def compute_signal_time_dsps(signal: np.ndarray, sample_rate: Union[float, int])
     freq1, Pxx_density1 = periodogram(
         signal,  fs=sample_rate, window=boxcar(N), detrend=False)  # type: ignore
     # print(type(psd_from_periodogram))
-    freq2, Pxx_density2 = welch(signal, fs=sample_rate, window=hamming(1000),
+    freq2, Pxx_density2 = welch(signal, fs=sample_rate, window=hamming(1000), # type: ignore
                                 nperseg=1000, noverlap=500, nfft=N, detrend=False,  # type: ignore
                                 axis=0)
 
@@ -1306,7 +1307,7 @@ def extract_data_epochs(signal: np.ndarray, sample_rate: float, markers_labels_t
         - `signal` (np.array): 1D array of samples
         - `srate` (float): sampling rate of the signal
         - `marker_labels_times` (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
-        - `select_events` (tuple): tuple of selected event types ex (111,100)
+        - `select_events` (tuple): tuple of selected event types ex: (111,100) or ("111","100")
         - `epoch_limits` (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
             ex1: (0,4) - From 0 sec before to 4 sec after the time-locking event.
             ex2: (1,2) - From 1 sec before to 2 sec after the time-locking event.
@@ -1661,6 +1662,7 @@ def extract_data_epochs_from_all_signals(signals: np.ndarray[Any, np.dtype[Union
     -----------
         - `signals` (np.ndarray): 2D array of signals where each signal represents a column (axis=1)
         - `sample_rate` (float, int): Signal sampling rate
+        - `select_events` (tuple): tuple of selected event types ex: (111,100) or ("111","100")
         - `markers_labels_times` (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
         - `epoch_limits` (tuple): 2 element tuple specifying the start and end of the epoch relative to the event (in seconds). 
 
@@ -1803,6 +1805,318 @@ def compute_psds_for_each_epoch_all_signals(input_dict: dict, sample_rate: Union
 
     return output_dict
 
+# =============================================================================
+############################## ERSP calculations  #############################
+# =============================================================================
+def compute_ERSPs_via_events_psds(reference_PSDs: np.ndarray, event_PSDs: np.ndarray) -> np.ndarray:
+    '''
+    Computes ERSP using reference and event periods' PSDs
+    - Calculates the percentage change relative to the reference PSD
+
+    
+    Parameters
+    ----------
+
+        - `reference_PSDs` (np.ndarray): PSD magnitudes of the reference period as a 2D array with each column is the PSD of an epoch
+        - `event_PSDs` (np.ndarray): PSD magnitudes of the event period as a 2D array with each column is the PSD of an epoch
+
+    Returns:
+    ----------
+        - `ersp` (np.ndarray): 2D array of ERSPs where each column represents the ersps of one event
+
+    # Sources of ERSP calculation method:
+    - G.Pfurtscheller et al., Event-related EEG/MEG synchronization and desynchronization: basic principles (page 4)
+        - DOI: 10.1016/s1388-2457(99)00141-8
+        - https://pubmed.ncbi.nlm.nih.gov/10576479/
+    - K.Nakayashiki et al., Modulation of event-related desynchronization during kinematic and kinetic hand movements (page 5)
+        - DOI: 10.1186/1743-0003-11-90
+        - https://jneuroengrehab.biomedcentral.com/articles/10.1186/1743-0003-11-90
+    '''
+    # Rounding step to tackle imprecision in PSD results (on non-existing frequency components)
+    round_button = True
+    if round_button:
+        reference_PSDs = np.around(reference_PSDs, decimals=6, out=None)
+        event_PSDs = np.around(event_PSDs, decimals=6, out=None)
+
+    reference_PSDs = np.sqrt(reference_PSDs)
+    event_PSDs = np.sqrt(event_PSDs)
+
+    # Nayakashki's ERSP Formula
+    diff_PSDs = np.subtract(event_PSDs,reference_PSDs)
+    ersp = np.divide(diff_PSDs, reference_PSDs,out=np.zeros_like(reference_PSDs), where=reference_PSDs!=0) * 100
+    
+    # Manage nan values
+    ersp = np.nan_to_num(ersp, copy=False, nan=0.0)  
+    return ersp
+
+def compute_successive_epochs_ERSPs_for_all_signals(input_dict: dict, event_labels: tuple[str, str]) -> dict:
+    """
+    Computes the successive ERSPs of all signals
+        ERSPs are computed using the PSDs of two successive epoch of different type.
+        ERSP calculation is based on `compute_ERSPs_via_events_psds()`
+
+    Parameters:
+    ----------
+        - `input_dict`(dict): Dictionary of epoched signals and associated PSDs (output of `compute_psds_for_each_epoch_all_signals()`)
+        - `event_labels`(tuple): Tuple of event labels (str) of length two.
+            Used to select appropriately the epoch type for ERSP calculation
+            - event_labels[0] (str): label of the reference epochs (prior to event) to compute the ERSP
+            - event_labels[1] (str): label of the event epochs (after event marker) to compute the ERSP
+
+    Retruns:
+    -----------
+        `output_dict` as `input_dict` with new "ERSPs" key in Epochs dictionary alongside "time_signals" and "PSDs"
+        - `output_dict` (dict): Dictionary of epoched signals for all signals with their PSDs and ERSPs
+            - keys (str): `channel_name` ("Channel_i")
+            - value (dict): `epochs_dict`
+                - key (str): "Epochs"
+                - value (dict) : `time_signal_epochs_dict`
+                    - keys (str): "time_signals", "PSDs","ERSPs"
+                    - values (dict) : 
+                        - epoched_signal (<= extract_data_epochs() output), 
+                        - psd_results_all_epochs_of_type_i (<= compute_psds_for_each_epoch() output)
+                        - electrodei_ERSPs_dict (<=compute_ERSPs_via_events_psds() output)
+
+    Examples:
+    ----------
+    # Create a 2D array of signals
+        # Define the sample rate and duration
+        srate= 12  # samples per second
+        duration = 8
+        # Calculate the total number of samples
+        num_samples = int(srate * duration)
+
+        # Generate a time array with equally spaced time points
+        times = np.linspace(0, duration, num_samples, endpoint=False)
+
+        # Generate a 2d array of samples  composed of 6 signals (columns)
+        samples = np.random.uniform(low=-20, high=20, size=(num_samples,6))
+
+    # Create a 2d array of marker timestamps and labels
+        labels = [100,111,100,111,100,111]
+        timestamps = [1.2,2.2,3.2,4.2,5.2,6.2]
+        marker_timestamps_labels = create_marker_times_labels_array2(marker_labels=labels,marker_time_stamps=timestamps)
+
+    # Find the nearest sample timestamp to each marker
+        nearest_markers_array = nearest_timestamps_array_finder(signal_times_stamps=times,markers=marker_timestamps_labels)
+        print(nearest_markers_array["markers_timestamps"])
+
+    # Epoch the signals at once
+        epoch_limits = (0,1)
+        signals_epoched = extract_data_epochs_from_all_signals(signals=samples,sample_rate=srate,markers_labels_times=nearest_markers_array,
+                                                            select_events=(100,111),epoch_limits=epoch_limits)
+    # Compute PSD for all epochs of all signals at once
+        fft_length=len(signals_epoched["Channel_1"]["Epochs"]["time_signals"]["label_111"]["signal_segments"])
+        signals_epochs_psds = compute_psds_for_each_epoch_all_signals(input_dict=signals_epoched,sample_rate=srate,
+                                                                        nfft=fft_length)
+        signals_epochs_psds["Channel_1"]["Epochs"]["PSDs"]["label_100"]["PSD_magnitudes"]
+
+    #Compute successive ERSP for all signals at once (one time window)
+        signals_epochs_psds_ersps=compute_successive_epochs_ERSPs_for_all_signals(input_dict=signals_epochs_psds,event_labels=("label_100","label_111"))
+
+    Note: By default the length of the fft used to perform dsp estimation is the length of the epoch (nfft=None)
+    """
+    output_dict = input_dict.copy()
+
+    # Check if event_labels exist in input_dict
+    if not all(event_label in input_dict[list(input_dict.keys())[0]]["Epochs"]["PSDs"] for event_label in event_labels):
+        raise ValueError(f"Specified event labels {event_labels} do not correspond to those in input dictionary.")
+    else:
+        print(f"Event labels found: \n-Reference period label set to: {event_labels[0]}\n-Event period label set to: {event_labels[1]}")
+        for channel_name in input_dict:
+            reference_epochs_PSD = input_dict[channel_name]["Epochs"]["PSDs"][str(event_labels[0])]["PSD_magnitudes"]
+            event_epochs_PSD = input_dict[channel_name]["Epochs"]["PSDs"][str(event_labels[-1])]["PSD_magnitudes"]
+
+            successive_ersp_array_electrode_i = compute_ERSPs_via_events_psds(
+                reference_PSDs=reference_epochs_PSD, event_PSDs=event_epochs_PSD)
+            frequencies = output_dict[channel_name]["Epochs"]["PSDs"][str(event_labels[0])]["PSD_frequencies"][:, 0]
+
+            electrodei_ERSPs_dict = {"ERSP_frequencies": frequencies, "ERSP_magnitudes": successive_ersp_array_electrode_i}
+            output_dict[channel_name]["Epochs"]["ERSPs"] = electrodei_ERSPs_dict
+
+    return output_dict
+
+
+def time_frequency_ERSPs_all_signals(signals:np.ndarray,sample_rate:Union[float,int],markers_labels_times,select_events:Tuple[Any,Any],
+                                     epoch_timecourse_limits:Tuple[Union[float,int],Union[float,int],Union[float,int]])->dict:
+    """
+    Computes the timecourse of successive ERSPs of all signals.
+        Epoch extraction is based on `extract_data_epochs_from_all_signals()`
+        PSDs estimation is based  on `compute_psds_for_each_epoch_all_signals()`
+        ERSP calculation is based on `compute_ERSPs_via_events_psds()`
+    
+    Note : For each signal, ERSPs are computed using the PSDs of two successive epoch (of different type).
+
+    Parameters:
+    ----------
+        - `signals` (np.ndarray): 2D array of signals where each signal represents a column (axis=1)
+        - `sample_rate` (float,int): Sampling rate of the signals
+        - `markers_labels_times` (dict): Dictionary of 1D arrays of marker information under keys ("markers_timestamp_indices","markers_timestamps", "marker_labels")
+        - `select_events` (tuple): Tuple of selected event types ex: (111,100) or ("111","100")
+        - `epoch_timecourse_limits` (tuple): 3 element tuple specifying the size of the time window of interest and its temporal resolution (its epoch width).
+            - epoch_timecourse_limits[0] (float,int): Start time of the window of interest, relative to the events (in seconds)
+            - epoch_timecourse_limits[1] (float,int): End time of the window of interest, relative to the events (in seconds)
+            - epoch_timecourse_limits[2] (float,int): Timelength (width) of the epochs (in seconds)
+
+        Note: `epoch_timecourse_limits` Defines the time window of interest, it is subdivised into epochs of smaller size (temporal resolution or epoch width). 
+        The width of the epoch also determines the number of epochs contained in the time window of interest.
+         
+    Returns:
+    -----------
+        - `ersps_timecourse_dict`(dict): Dictionary of the timecourse of the successive ERSPs of each signal ()
+            - keys (str): `time_bin` (ex "(0, 1)")
+            - values (dict): `epochs_dict` (output of `compute_successive_epochs_ERSPs_for_all_signals()`)
+
+    Examples:
+    ----------
+    ### Create a 2D array of signals
+        # Define the sample rate and duration
+        srate= 12  # samples per second
+        duration = 12
+        # Calculate the total number of samples
+        num_samples = int(srate * duration)
+
+        # Generate a time array with equally spaced time points
+        times = np.linspace(0, duration, num_samples, endpoint=False)
+
+        # Generate a 2d array of samples  composed of 6 signals (columns)
+        samples = np.random.uniform(low=-20, high=20, size=(num_samples,6))
+
+    ### Create a 2d array of marker timestamps and labels
+        labels = [100,111,100,111,100,111]
+        timestamps = [1.2,2.2,3.2,4.2,5.2,6.2]
+        marker_timestamps_labels = create_marker_times_labels_array2(marker_labels=labels,marker_time_stamps=timestamps)
+
+    ### Find the nearest sample timestamp to each marker
+        nearest_markers_array = nearest_timestamps_array_finder(signal_times_stamps=times,markers=marker_timestamps_labels)
+        print(nearest_markers_array["markers_timestamps"])
+
+    ### Compute successive ERSP for all signals at once (3 time windows of 1s) [(0,1),(1,2),(2,3),(3,4)]
+        signals_ersps_timecourse= time_frequency_ERSPs_all_signals(signals=samples,sample_rate=srate,markers_labels_times=nearest_markers_array,
+                                    select_events=(100,111),epoch_timecourse_limits=(0,4,1))
+
+    ### Access data of successive ERSP for all signals in different time windows (1,2)
+        signals_ersps_timecourse["(1, 2)"]["Channel_4"]["Epochs"]["ERSPs"]["ERSP_frequencies"]
+        signals_ersps_timecourse["(3, 4)"]["Channel_1"]["Epochs"]["ERSPs"]["ERSP_magnitudes"]
+    
+    """
+    try:
+        start,stop,step=epoch_timecourse_limits
+        time_vector=np.arange(start,stop+step,step)
+        #time_bins=zip(time_vector[::2], time_vector[1::2])
+        successive_time_bins = zip(time_vector[:-1], time_vector[1:])
+
+        ersps_timecourse_dict={}
+
+        for time_bin in successive_time_bins:
+            print(time_bin)
+
+            EEG_signals_epoched = extract_data_epochs_from_all_signals(signals=signals,sample_rate=sample_rate,
+                                                                    markers_labels_times=markers_labels_times,select_events=select_events,
+                                                                    epoch_limits=time_bin)
+            EEG_signals_epochs_psds = compute_psds_for_each_epoch_all_signals(input_dict=EEG_signals_epoched, sample_rate=sample_rate, nfft=int(len(signals)/8))
+
+            #EEG_signals_epochs_psds = compute_psds_for_each_epoch_all_signals(input_dict=EEG_signals_epoched, sample_rate=sample_rate)
+
+            EEG_signals_epochs_psds_ersps=compute_successive_epochs_ERSPs_for_all_signals(input_dict=EEG_signals_epochs_psds,event_labels=("label_100","label_111"))
+
+            ersps_timecourse_dict[str(time_bin)]=EEG_signals_epochs_psds_ersps
+        return ersps_timecourse_dict
+    
+    except ValueError as ve:
+        additional_info =f'Advice: Check that epochs do not overflow the signal on its edges \n epoch_timecourse_limits relative to each marker (start,end,resolution): {epoch_timecourse_limits}, \n Specified marker timestamps: {markers_labels_times["markers_timestamps"]} \n Signal is of length: {int(len(signals)/sample_rate)}. \n  '
+        full_message = f"{ve}\n{additional_info}"
+        raise ValueError(full_message) from ve
+
+
+def convert_time_frequency_ERSPs_all_signals(ERSP_timecourse_dict:dict)->Tuple[np.ndarray,list[np.ndarray]]:
+    """
+    Convert dictionary of ERSP timecourse for all signals to an array and list of arrays to match `matplotlib.imshow()` expected format.
+        - Aims to facilitate data visualization using `matplotlib.imshow()` by matching the expected input format 2D array (frequencies,times)
+        - To generate the 4D array, the input dictionary is flattened then transposed transposed to match the expected format
+        - To generate the list of array, the 4D array is separated along its last axis (axis=3)
+
+    Parameters:
+    ----------
+        - `ERSP_timecourse_dict` (dict): 2D array of signals where each signal represents a column (axis=1)
+
+        Note: `epoch_timecourse_limits` Defines the time window of interest, it is subdivised into epochs of smaller size (temporal resolution or epoch width). 
+        The width of the epoch also determines the number of epochs contained in the time window of interest.
+         
+    Returns:
+    -----------
+        - `final_4d_array` (np.ndarray): ERSP timecourse across all electrodes and trials stored as a 4D array shaped as (frequencies,time_bins,trial,channels)
+        - `list_3darrays` (list): ERSP timecourse across all electrodes and trials stored as a list of 3D arrays shaped as (frequencies,time_bins,trial), with position in list corresponds to a channel
+
+    Examples:
+    ----------
+    ### Create a 2D array of signals
+        # Define the sample rate and duration
+        srate= 12  # samples per second
+        duration = 12
+        # Calculate the total number of samples
+        num_samples = int(srate * duration)
+
+        # Generate a time array with equally spaced time points
+        times = np.linspace(0, duration, num_samples, endpoint=False)
+
+        # Generate a 2d array of samples  composed of 6 signals (columns)
+        samples = np.random.uniform(low=-20, high=20, size=(num_samples,6))
+
+    ### Create a 2d array of marker timestamps and labels
+        labels = [100,111,100,111,100,111]
+        timestamps = [1.2,2.2,3.2,4.2,5.2,6.2]
+        marker_timestamps_labels = create_marker_times_labels_array2(marker_labels=labels,marker_time_stamps=timestamps)
+
+    ### Find the nearest sample timestamp to each marker
+        nearest_markers_array = nearest_timestamps_array_finder(signal_times_stamps=times,markers=marker_timestamps_labels)
+        print(nearest_markers_array["markers_timestamps"])
+
+    ### Compute successive ERSP for all signals at once (3 time windows of 1s) [(0,1),(1,2),(2,3),(3,4)]
+        signals_ersps_timecourse= time_frequency_ERSPs_all_signals(signals=samples,sample_rate=srate,markers_labels_times=nearest_markers_array,
+                                            select_events=(100,111),epoch_timecourse_limits=(0,4,1))
+
+    ### Convert successive ERSP timecourses of all signals
+        ERSP_timecourse_as_4d_array,ERSP_timecourse_as_list_of_arrays=convert_time_frequency_ERSPs_all_signals(ERSP_timecourse_dict=signals_ersps_timecourse)
+
+    ### Access data of successive ERSP timecourses for all signals in different time windows
+        # using the list format
+
+        #select channel_1 (index=0),select ERSP timecourse of the 3rd trial (index=2)
+        ERSP_timecourse_as_list_of_arrays[0][:,:,2]
+        #select channel_5 (index=4),select ERSP timecourse of the 1st trial (index=0)
+        ERSP_timecourse_as_list_of_arrays[4][:,:,0]
+
+        # using the 4D array format
+
+        #select channel_1 (index=0),select ERSP timecourse of the 3rd trial (index=2)
+        ERSP_timecourse_as_4d_array[:,:,2,0]
+        #select channel_5 (index=4),select ERSP timecourse of the 1st trial (index=0)
+        ERSP_timecourse_as_4d_array[:,:,0,4]
+
+    """
+
+    ersps_all_channels_all_timebins=[]
+
+    #iterate over each timebin to
+    for time_bin in ERSP_timecourse_dict.keys():
+        ersp_all_channels_single_timebin=[]
+        for channel in ERSP_timecourse_dict[time_bin].keys():
+            ersp_one_channel_single_timebin=ERSP_timecourse_dict[time_bin][channel]["Epochs"]["ERSPs"]["ERSP_magnitudes"]
+            ersp_all_channels_single_timebin.append(ersp_one_channel_single_timebin)
+        array2d_one_timebin_ersp_allchannels=np.stack(ersp_all_channels_single_timebin,axis=1)
+        ersps_all_channels_all_timebins.append(array2d_one_timebin_ersp_allchannels)
+
+    #stack data as 4D array of dimensions (frequencies,channels,time_bins,trial)
+    array_4d=np.stack(ersps_all_channels_all_timebins,axis=2)
+
+    #transpose the 4d array to get dimensions (frequencies,time_bins,trial,channels)
+    final_4d_array=np.transpose(array_4d,(0,2,3,1))
+
+    # Break down the 4D array into a list of 3D arrays (frequencies,time_bins,trial) along axis i (channel axis) and match plt.imshow() expected format on each plane
+    list_3darrays= [final_4d_array[:, :, :, i] for i in range(final_4d_array.shape[3])]
+
+    return final_4d_array,list_3darrays
 
 # =============================================================================
 ############################# Signal preprocessing  ###########################
@@ -1871,6 +2185,7 @@ def filter_signal(input_signals: np.ndarray, sample_rate: Union[int, float], ord
         - `freq_test_BP` (ndarray): Frequency vector for verification of the filter response.
         - `magnitude_test_BP` (ndarray): Magnitude vector for verification of the filter response.
     """
+    LOW_CUTOFF_FREQ_THEORETICAL,HIGH_CUTOFF_FREQ_THEORETICAL,NOTCH_CUTOFF_FREQ = None,None,None
     if len(cutofffreq) < 2 or len(cutofffreq) > 3:
         raise ValueError(
             f"cutofffreq tuple length:{len(cutofffreq)} - Input tuple length must be between 2 and 3")
