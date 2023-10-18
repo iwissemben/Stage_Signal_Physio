@@ -59,6 +59,7 @@ def merge_lists_alternatively(list1, list2) -> List:
 def save_figures_to_pdf_single_per_page(pdf_filename: str, figures_list: list) -> None:
     """
     Saves a list of figures in a single PDF file.
+        Overwrites the existing PDF file.
 
     Parameters:
     ----------
@@ -91,15 +92,20 @@ def save_figures_to_pdf_single_per_page(pdf_filename: str, figures_list: list) -
         # Save the figures to a PDF file
         save_figures_as_pdf(pdf_filename='output.pdf', figures_list=figure_list)
     """
+    
+    if os.path.exists(pdf_filename):
+        # delete fiel if existing
+        os.remove(pdf_filename)  
+        print(f"{pdf_filename} already exists, will be overwritten")
+    #create the pdf file 
     pdf_file = PdfPages(pdf_filename)
 
     # iterating over the numbers in list
     for figure in figures_list:
-
-        # and saving the files
+        # saving the figures in file
         figure.savefig(pdf_file, format='pdf')
 
-    # close the object
+    # close the file
     pdf_file.close()
 
 
@@ -2157,7 +2163,8 @@ def rereference_signals(input_signals: np.ndarray) -> np.ndarray:
     """
     print(f"input_signals shape:{input_signals.shape}")
     print(f"input_signals whole mean:{np.mean(input_signals)}")
-    mean_vector = np.mean(input_signals)
+    mean_vector = np.mean(input_signals,axis=1)
+    mean_vector=mean_vector.reshape(-1,1)
     print(f"mean_vector shape: {mean_vector.shape}")
     EEG_amplitudes_rereferenced = input_signals-mean_vector
 
