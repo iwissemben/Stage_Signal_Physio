@@ -1,5 +1,6 @@
 
 # Stage Signal Physiologique 
+<img width="2300" alt="final_banner@2x" src="https://github.com/iwissemben/custom-signal-toolbox-art/blob/main/illustrations/imgs/Output/2x/final_banner@2x.png?raw=true">
 
 ## Description 
 
